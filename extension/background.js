@@ -2,7 +2,8 @@
 // Two jobs:
 //   1) Suppress Chrome's native zoom bubble by disabling browser zoom on every
 //      tab/navigation (setZoomSettings resets to default on each navigation, so
-//      it must be reapplied).
+//      it must be reapplied) - EXCEPT on paused sites (x:<host>), where browser
+//      zoom is handed back to Chrome ("automatic") so native Ctrl +/- work.
 //   2) Keep the toolbar badge showing the current site's zoom %, and handle the
 //      keyboard commands.
 
@@ -58,18 +59,22 @@ async function setFactor(host, factor) {
   }
 }
 
-function disableBrowserZoom(tabId) {
-  // Pinning browser zoom to "disabled" reverts the tab to 100% silently and
-  // makes Chrome ignore all zoom changes => the bubble can never appear.
-  chrome.tabs.setZoomSettings(tabId, { mode: "disabled" }).catch(() => {
-    /* chrome://, web store, etc. will reject; ignore */
-  });
-}
-
 async function isDisabled(host) {
   if (!host) return false;
   const res = await chrome.storage.local.get("x:" + host);
   return !!res["x:" + host];
+}
+
+async function applyZoomMode(tabId, host) {
+  // Normal sites: pin browser zoom to "disabled", which reverts the tab to 100%
+  // silently and makes Chrome ignore all zoom changes => the native bubble can
+  // never appear. Paused sites: hand zoom back to the browser ("automatic"), so
+  // native Ctrl +/- work as usual (the bubble then appearing is acceptable - the
+  // user explicitly opted this site out of the extension).
+  const mode = (await isDisabled(host)) ? "automatic" : "disabled";
+  chrome.tabs.setZoomSettings(tabId, { mode }).catch(() => {
+    /* chrome://, web store, etc. will reject; ignore */
+  });
 }
 
 async function refreshBadge(tabId, host) {
@@ -89,7 +94,7 @@ async function refreshBadge(tabId, host) {
 // reliable hook after the zoom settings have been reset by navigation.
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === "loading") {
-    disableBrowserZoom(tabId);
+    applyZoomMode(tabId, hostOf(tab.url));
   }
   if (changeInfo.status === "complete" || changeInfo.url) {
     refreshBadge(tabId, hostOf(tab.url));
@@ -99,24 +104,29 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   try {
     const tab = await chrome.tabs.get(tabId);
-    disableBrowserZoom(tabId);
-    refreshBadge(tabId, hostOf(tab.url));
+    const host = hostOf(tab.url);
+    applyZoomMode(tabId, host);
+    refreshBadge(tabId, host);
   } catch (e) {
     /* ignore */
   }
 });
 
-// Keep the active tab's badge in sync when the zoom data changes from anywhere:
-// the content-script Ctrl +/- keys, the popup, or the options page. (Tab events
-// above cover navigation and activation; this covers in-place edits.)
+// Keep the active tab in sync when the zoom data changes from anywhere: the
+// content-script Ctrl +/- keys, the popup (including its disable toggle), or the
+// options page. Tab events above cover navigation and activation; this covers
+// in-place edits, so pausing/resuming flips the zoom mode and badge live.
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local") refreshActiveBadge();
+  if (area === "local") syncActiveTab();
 });
 
-async function refreshActiveBadge() {
+async function syncActiveTab() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab) await refreshBadge(tab.id, hostOf(tab.url));
+    if (!tab) return;
+    const host = hostOf(tab.url);
+    await applyZoomMode(tab.id, host);
+    await refreshBadge(tab.id, host);
   } catch (e) {
     /* ignore */
   }

@@ -16,6 +16,11 @@
   const MIN = 0.25;
   const MAX = 5.0;
 
+  // Cached paused state, kept current by refresh() so the keydown handler can
+  // decide synchronously whether to intercept Ctrl +/- or let the browser have
+  // them (an async storage read would be too late to call preventDefault).
+  let disabled = false;
+
   function apply(factor) {
     const f = factor && factor > 0 ? factor : 1.0;
     // documentElement exists at document_start even before the body is parsed.
@@ -37,9 +42,10 @@
     try {
       chrome.storage.local.get([key, DEFAULT_KEY, disabledKey], (res) => {
         if (chrome.runtime.lastError) return;
+        disabled = !!res[disabledKey];
         // Paused on this site: leave the page at its natural 100%, ignoring any
         // stored factor and the global default.
-        apply(res[disabledKey] ? 1.0 : resolve(res));
+        apply(disabled ? 1.0 : resolve(res));
       });
     } catch (e) {
       /* extension context can be unavailable on some restricted pages */
@@ -136,6 +142,9 @@
     window.addEventListener(
       "keydown",
       (e) => {
+        // Paused on this site: do not touch the keys at all. Leaving them
+        // un-prevented lets Chrome's native Ctrl +/- (and its bubble) work.
+        if (disabled) return;
         // Require Ctrl, allow Shift (Ctrl++ is Ctrl+Shift+=), exclude Alt/Meta
         // (Alt+Shift+* is the command set; Meta is OS-level).
         if (!e.ctrlKey || e.altKey || e.metaKey) return;

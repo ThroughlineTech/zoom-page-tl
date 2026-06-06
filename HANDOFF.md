@@ -79,7 +79,8 @@ Two mechanisms, both required:
 2. The service worker calls `chrome.tabs.setZoomSettings(tabId, { mode: "disabled" })`
    on every navigation and tab activation. This pins browser zoom to 100% and makes
    Chrome ignore all zoom changes, so the bubble can never fire. The extension itself
-   never calls `setZoom`.
+   never calls `setZoom`. Exception: on a paused site (`x:<host>`) the worker sets
+   `mode: "automatic"` instead, handing native zoom back to Chrome (see section 7).
 
 Why CSS `zoom` specifically (not `transform: scale`): in Chromium, the `zoom` property
 is a real layout-affecting zoom. It reflows content the same way browser zoom does, so
@@ -149,8 +150,9 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   from the popup or keyboard apply live without a reload. Also intercepts `Ctrl +/-/0`
   (`keydown`, capture, `preventDefault`) and steps the per-site CSS zoom via `stepFrom`
   (from `zoom.js`, loaded first). Honors `x:<hostname>`: when set, it holds the page at
-  100% and the keyboard zoom no-ops. Wrapped in try/catch for pages where the extension
-  context is unavailable.
+  100% and leaves Ctrl +/- to the browser (it does not preventDefault them), so native
+  zoom works there. Wrapped in try/catch for pages where the extension context is
+  unavailable.
 
 - `extension/background.js`
   Service worker. On `tabs.onUpdated` (status loading) and `tabs.onActivated`, calls
@@ -162,9 +164,12 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   the factor the same way content.js does (`z:<host>` -> `cfg:defaultZoom` -> 1.0), so
   both the command stepping base and the badge are default-aware: with a non-100% global
   default, "zoom in" steps up from what is on screen and the badge shows that percent.
-  Honors `x:<hostname>`: on a paused site the commands no-op and the badge shows a gray
-  "off". Contains its own copy of `ZOOM_STEPS` and `stepFrom` because service workers
-  cannot easily share the popup's plain script.
+  Honors `x:<hostname>`: on a paused site the commands no-op, the badge shows a gray
+  "off", and `applyZoomMode` sets the tab to `"automatic"` (not `"disabled"`) so native
+  browser zoom works. A `storage.onChanged` listener (`syncActiveTab`) re-applies the
+  mode and badge live, so pausing/resuming takes effect without a reload. Contains its
+  own copy of `ZOOM_STEPS` and `stepFrom` because service workers cannot easily share
+  the popup's plain script.
 
 - `extension/zoom.js`
   Shared helpers: `ZOOM_STEPS`, `hostKey`, `stepFrom`. Loaded as a plain script before
@@ -221,9 +226,12 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   `cfg:defaultZoom`, else 1.0, and re-resolves live when either key changes.
 - Per-site disable: `x:<hostname>` = `true` pauses zoom for that host. When set,
   content.js holds the page at its natural 100% (ignoring `z:<host>` and the default)
-  and the keyboard/commands are inert; the badge shows "off". The `z:<host>` factor is
-  left intact, so removing `x:<host>` restores the previous level live. Absence means
-  enabled. Written by the popup "Disable here" toggle.
+  and the extension's own zoom is inert; the badge shows "off". The service worker also
+  sets that tab to `setZoomSettings` `"automatic"`, handing native Ctrl +/- (and the
+  browser's zoom bubble) back to Chrome - the deliberate "act as if the extension is not
+  here" behavior for opted-out sites. The `z:<host>` factor is left intact, so removing
+  `x:<host>` restores both the previous level and the `"disabled"` (no-bubble) mode live.
+  Absence means enabled. Written by the popup "Disable here" toggle.
 
 Keying is by `location.hostname`. This matches ZPWE's "treat domain and subdomains as
 separate sites" behavior: `x.com`, `www.x.com`, and `sub.x.com` are independent, and
@@ -291,10 +299,11 @@ the original Zoom Page WE. Status of the highest-signal candidates for this rewr
 - Per-site disable / pause [DONE for the core]. The popup "Disable here" toggle writes
   `x:<host>`; content.js holds the site at 100% and the keyboard/commands no-op; the
   badge shows "off". This is the most-requested feature and the workaround for sites
-  that misbehave under zoom (buglist #3 chatgpt.com, #14). Remaining follow-ups: surface
-  and manage `x:` sites in the options page, include them in JSON export/import (today
-  export covers only `z:*` and `cfg:defaultZoom`), and decide whether a paused site
-  should also restore native browser zoom (currently it stays suppressed, so no bubble).
+  that misbehave under zoom (buglist #3 chatgpt.com, #14). A paused site also restores
+  native browser zoom (the worker sets the tab to `"automatic"`), so Chrome's own
+  Ctrl +/- and zoom bubble work there - DONE. Remaining follow-ups: surface and manage
+  `x:` sites in the options page, and include them in JSON export/import (today export
+  covers only `z:*` and `cfg:defaultZoom`).
 - CSS-zoom site-compat bugs (e.g. cursor hit-offset at non-100% zoom on map/overlay
   UIs) - OPEN.
 - A durable persistence regression test (incognito + restart + new tab) - OPEN.
@@ -322,7 +331,8 @@ the original Zoom Page WE. Status of the highest-signal candidates for this rewr
   stays near 100%.
 - On a zoomed site, open the popup and check "Disable here". Confirm the page drops to
   100%, the popup shows "Off" with dimmed controls, and the badge shows "off". Confirm
-  Ctrl +/- and Alt+Shift do nothing while paused. Uncheck it and confirm the previous
+  native Ctrl +/- now do Chrome's own zoom (its bubble appearing is expected) while the
+  extension's Alt+Shift commands do nothing. Uncheck it and confirm the previous
   zoom level returns. Reload the page and confirm it stays paused until you re-enable.
 - Open Options (popup footer). Set the default zoom to 125%, then open a site you have
   never customized. Confirm it renders at 125%. Set that site explicitly to a different
