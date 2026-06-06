@@ -139,9 +139,20 @@ When the author pastes a report ("X is broken", a URL, a picture):
   swallowed, which is correct (the extension does not run there anyway).
 - The dev profile starts logged out. For a login-gated repro, log in once in the dev
   window; it persists.
-- The standalone Chromium may already be running for the author's normal browsing.
-  The dev window uses its own `--user-data-dir` (`.dev-profile/`), so it launches as a
-  separate instance and does not disturb that session.
+- The dev window is a SEPARATE instance from the author's everyday browsing.
+  Confirm fixes in the dev window (the one `npm run dev` opens), not in a normal
+  Chromium session. The standalone Chromium may already be running for normal
+  browsing; the dev window uses its own `--user-data-dir` (`.dev-profile/`), so it is
+  an independent instance and does not disturb that session.
+- Same folder, same id, separate copies. An unpacked extension loaded from the same
+  `extension/` path gets the SAME extension id in every profile (Chromium derives the
+  id from the path). But each browser instance manages its own loaded copy: hot reload
+  in the dev window does NOT touch a copy loaded in the everyday session. If the
+  everyday session has an OLD unpacked copy (for example showing a pre-rename name),
+  it must be reloaded there by hand once (the reload arrow on its chrome://extensions
+  card), or just removed so the dev window is the single dev surface. This bit us on
+  the first "bug": the code was already renamed; only a stale everyday-session copy
+  still showed the old name.
 - `dev-shot.js` opens and closes a temporary tab in the dev window each run; the
   author will see it flash. That is expected (it is the agent reproducing the page).
 - Env overrides: `ZP_DEV_BROWSER` (path to a different Chromium binary) and
