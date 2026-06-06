@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --btn: #f3f4f6;
+    --btn-hover: #e5e7eb;
+    --accent: #2563eb;
+    --accent-fg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1f1f23;
+      --fg: #e8e8ea;
+      --muted: #9aa0a6;
+      --line: #34343a;
+      --btn: #2c2c31;
+      --btn-hover: #3a3a41;
+      --accent: #3b82f6;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    width: 248px;
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    user-select: none;
+  }
+  .host {
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+  }
+  .pct {
+    flex: 1;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  button {
+    font: inherit;
+    color: var(--fg);
+    background: var(--btn);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  button:hover { background: var(--btn-hover); }
+  button:active { transform: translateY(0.5px); }
+  .rnd {
+    width: 38px;
+    height: 38px;
+    font-size: 20px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .presets {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    padding: 0 12px 8px;
+  }
+  .presets button {
+    padding: 6px 0;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .presets button.on {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
+  }
+  .actions {
+    display: flex;
+    gap: 6px;
+    padding: 0 12px 8px;
+  }
+  .actions button {
+    flex: 1;
+    padding: 8px 0;
+    font-size: 12px;
+  }
+  .footer {
+    border-top: 1px solid var(--line);
+    padding: 8px 12px;
+    text-align: right;
+  }
+  .footer a {
+    color: var(--muted);
+    font-size: 12px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .footer a:hover { color: var(--fg); text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="host" id="host">…</div>
+
+  <div class="stepper">
+    <button class="rnd" id="out" title="Zoom out">&minus;</button>
+    <div class="pct" id="pct">100%</div>
+    <button class="rnd" id="in" title="Zoom in">+</button>
+  </div>
+
+  <div class="presets" id="presets"></div>
+
+  <div class="actions">
+    <button id="fit" title="Fit zoom to window width">Fit width</button>
+    <button id="reset">Reset to 100%</button>
+  </div>
+
+  <div class="footer">
+    <a id="options">Options</a>
+  </div>
+
+  <script src="zoom.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "Zoom Page TL",
+  "version": "0.1.0",
+  "description": "Per-site full-page zoom via CSS, with no browser zoom bubble. Independent replacement for Zoom Page WE (full mode only).",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Zoom Page TL",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "zoom-in": {
+      "suggested_key": { "default": "Alt+Shift+Up" },
+      "description": "Zoom in (this site)"
+    },
+    "zoom-out": {
+      "suggested_key": { "default": "Alt+Shift+Down" },
+      "description": "Zoom out (this site)"
+    },
+    "zoom-reset": {
+      "suggested_key": { "default": "Alt+Shift+0" },
+      "description": "Reset zoom (this site)"
+    },
+    "zoom-autofit": {
+      "description": "AutoFit zoom to window width (this site)"
+    }
+  }
+}

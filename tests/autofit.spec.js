@@ -1,0 +1,86 @@
+// AutoFit-to-width. The measurement + clamp + persist all happen in the content
+// script in response to an "autofit" message; the popup button and the keyboard
+// command both drive that same message path, so testing the message covers the
+// logic. (chrome.commands hotkeys cannot be dispatched from Playwright; the
+// command wiring is on the manual checklist.)
+
+const { test, expect } = require("./fixtures");
+
+async function tabIdFor(sw, frag) {
+  return sw.evaluate(async (f) => {
+    const tabs = await chrome.tabs.query({});
+    const t = tabs.find((tab) => (tab.url || "").includes(f));
+    return t ? t.id : null;
+  }, frag);
+}
+
+async function runAutofit(sw, tabId) {
+  return sw.evaluate(
+    (id) => chrome.tabs.sendMessage(id, { type: "autofit" }),
+    tabId
+  );
+}
+
+test.beforeEach(async ({ serviceWorker }) => {
+  await serviceWorker.evaluate(() => chrome.storage.local.clear());
+});
+
+test("AutoFit shrinks a too-wide page and persists the factor", async ({
+  page,
+  serviceWorker,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto("/wide");
+
+  const tabId = await tabIdFor(serviceWorker, "localhost");
+  const resp = await runAutofit(serviceWorker, tabId);
+
+  // 3000px content in a 1000px viewport => ~0.33, within the [0.25, 5] range.
+  expect(resp.factor).toBeGreaterThan(0.28);
+  expect(resp.factor).toBeLessThan(0.4);
+
+  const stored = await serviceWorker.evaluate(() =>
+    chrome.storage.local.get("z:localhost")
+  );
+  expect(stored["z:localhost"]).toBeCloseTo(resp.factor, 5);
+
+  // The 100px marker should render ~100*factor in client coordinates.
+  const w = await page.evaluate(
+    () => document.getElementById("marker").getBoundingClientRect().width
+  );
+  expect(w).toBeCloseTo(100 * resp.factor, 0);
+});
+
+test("AutoFit on a page that already fits leaves it at 100%", async ({
+  page,
+  serviceWorker,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto("/");
+
+  const tabId = await tabIdFor(serviceWorker, "localhost");
+  const resp = await runAutofit(serviceWorker, tabId);
+
+  expect(resp.factor).toBeGreaterThan(0.98);
+  expect(resp.factor).toBeLessThanOrEqual(1.0);
+
+  // 100% is stored as the absence of a key.
+  const stored = await serviceWorker.evaluate(() =>
+    chrome.storage.local.get("z:localhost")
+  );
+  expect(stored["z:localhost"]).toBeUndefined();
+});
+
+test("AutoFit clamps an extremely wide page to the minimum factor", async ({
+  page,
+  serviceWorker,
+}) => {
+  // 3000px content in a very narrow viewport would want < 0.25; must clamp.
+  await page.setViewportSize({ width: 320, height: 600 });
+  await page.goto("/wide");
+
+  const tabId = await tabIdFor(serviceWorker, "localhost");
+  const resp = await runAutofit(serviceWorker, tabId);
+
+  expect(resp.factor).toBe(0.25);
+});

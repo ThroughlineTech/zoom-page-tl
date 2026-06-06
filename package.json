@@ -1,0 +1,17 @@
+{
+  "name": "zoom-page-tl",
+  "version": "0.1.0",
+  "description": "Zoom Page TL - per-site full-page zoom Chrome extension (MV3) with no native zoom bubble.",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "lint": "node scripts/check.js",
+    "test": "playwright test",
+    "start": "web-ext run -s extension -t chromium",
+    "build": "web-ext build -s extension -a dist --overwrite-dest"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "web-ext": "^8.3.0"
+  }
+}

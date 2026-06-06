@@ -1,0 +1,220 @@
+// Options page: global default zoom, manage-list UI, and JSON import/export.
+// The pure storage ops are tested via window.ZP (deterministic, no file dialog);
+// the UI is tested by driving the real DOM.
+
+const { test, expect } = require("./fixtures");
+
+async function openOptions(page, extensionId) {
+  await page.goto(`chrome-extension://${extensionId}/options.html`);
+  await page.waitForFunction(() => !!window.ZP);
+}
+
+function markerWidth(page) {
+  return page.evaluate(
+    () => document.getElementById("marker").getBoundingClientRect().width
+  );
+}
+
+test.beforeEach(async ({ serviceWorker }) => {
+  await serviceWorker.evaluate(() => chrome.storage.local.clear());
+});
+
+test("export then import round-trips per-site data and default", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await openOptions(page, extensionId);
+  await page.evaluate(async () => {
+    await window.ZP.setSite("a.example.com", 1.5);
+    await window.ZP.setSite("b.example.com", 0.75);
+    await window.ZP.setDefault(1.25);
+  });
+
+  const dump = await page.evaluate(() => window.ZP.exportData());
+  expect(dump).toEqual({
+    version: 1,
+    defaultZoom: 1.25,
+    sites: { "a.example.com": 1.5, "b.example.com": 0.75 },
+  });
+
+  await serviceWorker.evaluate(() => chrome.storage.local.clear());
+  const count = await page.evaluate(
+    (d) => window.ZP.importData(d, { replace: true }),
+    dump
+  );
+  expect(count).toBe(2);
+
+  const stored = await serviceWorker.evaluate(() =>
+    chrome.storage.local.get(null)
+  );
+  expect(stored["z:a.example.com"]).toBe(1.5);
+  expect(stored["z:b.example.com"]).toBe(0.75);
+  expect(stored["cfg:defaultZoom"]).toBe(1.25);
+});
+
+test("import merges by default and replaces when asked", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await openOptions(page, extensionId);
+  await page.evaluate(() => window.ZP.setSite("keep.example.com", 1.5));
+
+  await page.evaluate(() =>
+    window.ZP.importData(
+      { version: 1, sites: { "new.example.com": 2 } },
+      { replace: false }
+    )
+  );
+  let stored = await serviceWorker.evaluate(() =>
+    chrome.storage.local.get(null)
+  );
+  expect(stored["z:keep.example.com"]).toBe(1.5);
+  expect(stored["z:new.example.com"]).toBe(2);
+
+  await page.evaluate(() =>
+    window.ZP.importData(
+      { version: 1, sites: { "replaced.example.com": 1.1 } },
+      { replace: true }
+    )
+  );
+  stored = await serviceWorker.evaluate(() => chrome.storage.local.get(null));
+  expect(stored["z:keep.example.com"]).toBeUndefined();
+  expect(stored["z:new.example.com"]).toBeUndefined();
+  expect(stored["z:replaced.example.com"]).toBe(1.1);
+});
+
+test("import clamps out-of-range values and drops 100% / invalid", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await openOptions(page, extensionId);
+  const count = await page.evaluate(() =>
+    window.ZP.importData(
+      {
+        version: 1,
+        sites: {
+          "huge.example.com": 99,
+          "tiny.example.com": 0.01,
+          "one.example.com": 1.0,
+          "bad.example.com": "nope",
+        },
+      },
+      { replace: true }
+    )
+  );
+  expect(count).toBe(2);
+
+  const stored = await serviceWorker.evaluate(() =>
+    chrome.storage.local.get(null)
+  );
+  expect(stored["z:huge.example.com"]).toBe(5);
+  expect(stored["z:tiny.example.com"]).toBe(0.25);
+  expect(stored["z:one.example.com"]).toBeUndefined();
+  expect(stored["z:bad.example.com"]).toBeUndefined();
+});
+
+test("global default applies to un-customized sites; a site key overrides it", async ({
+  page,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({ "cfg:defaultZoom": 1.25 })
+  );
+  await page.goto("/");
+  await expect
+    .poll(async () => Math.round(await markerWidth(page)))
+    .toBe(125);
+
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({ "z:localhost": 2 })
+  );
+  await expect
+    .poll(async () => Math.round(await markerWidth(page)))
+    .toBe(200);
+
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.remove("z:localhost")
+  );
+  await expect
+    .poll(async () => Math.round(await markerWidth(page)))
+    .toBe(125);
+});
+
+test("options UI lists saved sites, edits a level, and removes a site", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({
+      "z:alpha.example.com": 1.5,
+      "z:beta.example.com": 0.9,
+    })
+  );
+  await openOptions(page, extensionId);
+
+  await expect(page.locator("#sites tr")).toHaveCount(2);
+  await expect(
+    page.locator("#sites tr").first().locator("td.host")
+  ).toHaveText("alpha.example.com");
+
+  const alphaInput = page
+    .locator("#sites tr", { hasText: "alpha.example.com" })
+    .locator("input");
+  await alphaInput.fill("175");
+  await alphaInput.blur();
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(() =>
+        chrome.storage.local
+          .get("z:alpha.example.com")
+          .then((r) => r["z:alpha.example.com"])
+      )
+    )
+    .toBe(1.75);
+
+  await page
+    .locator("#sites tr", { hasText: "beta.example.com" })
+    .locator("button.remove")
+    .click();
+  await expect(page.locator("#sites tr")).toHaveCount(1);
+  const stored = await serviceWorker.evaluate(() =>
+    chrome.storage.local.get(null)
+  );
+  expect(stored["z:beta.example.com"]).toBeUndefined();
+});
+
+test("default zoom field writes the default and resets it", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await openOptions(page, extensionId);
+  const def = page.locator("#default");
+  await def.fill("130");
+  await def.blur();
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(() =>
+        chrome.storage.local
+          .get("cfg:defaultZoom")
+          .then((r) => r["cfg:defaultZoom"])
+      )
+    )
+    .toBe(1.3);
+
+  await page.locator("#defaultReset").click();
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(() =>
+        chrome.storage.local
+          .get("cfg:defaultZoom")
+          .then((r) => r["cfg:defaultZoom"])
+      )
+    )
+    .toBeUndefined();
+  await expect(def).toHaveValue("100");
+});

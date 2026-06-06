@@ -1,0 +1,11 @@
+node_modules/
+dist/
+web-ext-artifacts/
+test-results/
+playwright-report/
+*.zip
+.DS_Store
+Thumbs.db
+# Original ZPWE source attached as read-only reference (GPLv2). Keep out of the
+# MIT-licensed history; drop it in locally for the agent.
+reference/
