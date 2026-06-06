@@ -66,7 +66,19 @@ function disableBrowserZoom(tabId) {
   });
 }
 
+async function isDisabled(host) {
+  if (!host) return false;
+  const res = await chrome.storage.local.get("x:" + host);
+  return !!res["x:" + host];
+}
+
 async function refreshBadge(tabId, host) {
+  // Paused on this site: a distinct gray "off" badge instead of a percent.
+  if (await isDisabled(host)) {
+    chrome.action.setBadgeText({ tabId, text: "off" });
+    chrome.action.setBadgeBackgroundColor({ tabId, color: "#6b7280" });
+    return;
+  }
   const f = await getFactor(host);
   const text = Math.abs(f - 1.0) < 1e-6 ? "" : String(Math.round(f * 100));
   chrome.action.setBadgeText({ tabId, text });
@@ -116,6 +128,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (!tab) return;
   const host = hostOf(tab.url);
   if (!host) return;
+  if (await isDisabled(host)) return; // paused on this site; commands do nothing
 
   // AutoFit needs a live measurement, so it runs in the content script. The
   // content script writes storage itself; we just refresh the badge after.

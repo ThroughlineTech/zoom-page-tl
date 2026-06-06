@@ -11,6 +11,7 @@
   if (!host) return; // about:, data:, etc.
   const key = "z:" + host;
   const DEFAULT_KEY = "cfg:defaultZoom"; // global default for un-customized sites
+  const disabledKey = "x:" + host; // when set, zoom is paused for this host
 
   const MIN = 0.25;
   const MAX = 5.0;
@@ -34,9 +35,11 @@
 
   function refresh() {
     try {
-      chrome.storage.local.get([key, DEFAULT_KEY], (res) => {
+      chrome.storage.local.get([key, DEFAULT_KEY, disabledKey], (res) => {
         if (chrome.runtime.lastError) return;
-        apply(resolve(res));
+        // Paused on this site: leave the page at its natural 100%, ignoring any
+        // stored factor and the global default.
+        apply(res[disabledKey] ? 1.0 : resolve(res));
       });
     } catch (e) {
       /* extension context can be unavailable on some restricted pages */
@@ -53,7 +56,7 @@
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "local") return;
-      if (changes[key] || changes[DEFAULT_KEY]) refresh();
+      if (changes[key] || changes[DEFAULT_KEY] || changes[disabledKey]) refresh();
     });
   } catch (e) {
     /* ignore */
@@ -79,6 +82,8 @@
   }
 
   async function autofit() {
+    const dis = await chrome.storage.local.get(disabledKey);
+    if (dis[disabledKey]) return 1.0; // paused on this site; do nothing
     const f = computeAutofitFactor();
     apply(f);
     if (Math.abs(f - 1.0) < 1e-6) {
@@ -112,8 +117,9 @@
   // resolves the global default correctly when a reset removes the key.
   function stepZoom(dir) {
     try {
-      chrome.storage.local.get([key, DEFAULT_KEY], (res) => {
+      chrome.storage.local.get([key, DEFAULT_KEY, disabledKey], (res) => {
         if (chrome.runtime.lastError) return;
+        if (res[disabledKey]) return; // paused on this site; the keys do nothing
         const next = dir === 0 ? 1.0 : stepFrom(resolve(res), dir);
         if (Math.abs(next - 1.0) < 1e-6) {
           chrome.storage.local.remove(key); // 100% => store nothing

@@ -103,9 +103,11 @@
     font-size: 12px;
   }
   .footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     border-top: 1px solid var(--line);
     padding: 8px 12px;
-    text-align: right;
   }
   .footer a {
     color: var(--muted);
@@ -114,6 +116,21 @@
     cursor: pointer;
   }
   .footer a:hover { color: var(--fg); text-decoration: underline; }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .toggle input { margin: 0; cursor: pointer; }
+  /* Paused on this site: dim the (now inert) zoom controls. */
+  body.off .stepper,
+  body.off .presets,
+  body.off .actions { opacity: 0.4; }
+  button:disabled { cursor: default; }
+  button:disabled:hover { background: var(--btn); }
 </style>
 </head>
 <body>
@@ -133,6 +150,9 @@
   </div>
 
   <div class="footer">
+    <label class="toggle" title="Pause zooming on this site">
+      <input type="checkbox" id="disable" />Disable here
+    </label>
     <a id="options">Options</a>
   </div>
 

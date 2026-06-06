@@ -148,7 +148,8 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   `document.documentElement.style.zoom`. Subscribes to `storage.onChanged` so changes
   from the popup or keyboard apply live without a reload. Also intercepts `Ctrl +/-/0`
   (`keydown`, capture, `preventDefault`) and steps the per-site CSS zoom via `stepFrom`
-  (from `zoom.js`, loaded first). Wrapped in try/catch for pages where the extension
+  (from `zoom.js`, loaded first). Honors `x:<hostname>`: when set, it holds the page at
+  100% and the keyboard zoom no-ops. Wrapped in try/catch for pages where the extension
   context is unavailable.
 
 - `extension/background.js`
@@ -161,8 +162,9 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   the factor the same way content.js does (`z:<host>` -> `cfg:defaultZoom` -> 1.0), so
   both the command stepping base and the badge are default-aware: with a non-100% global
   default, "zoom in" steps up from what is on screen and the badge shows that percent.
-  Contains its own copy of `ZOOM_STEPS` and `stepFrom` because service workers cannot
-  easily share the popup's plain script.
+  Honors `x:<hostname>`: on a paused site the commands no-op and the badge shows a gray
+  "off". Contains its own copy of `ZOOM_STEPS` and `stepFrom` because service workers
+  cannot easily share the popup's plain script.
 
 - `extension/zoom.js`
   Shared helpers: `ZOOM_STEPS`, `hostKey`, `stepFrom`. Loaded as a plain script before
@@ -172,8 +174,10 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
 - `extension/popup.html` / `extension/popup.js`
   The toolbar popup. Native-feeling, light/dark aware. Shows the current hostname and
   percent, a minus/plus stepper, a preset grid, a "Fit width" (AutoFit) button, a
-  reset button, and an "Options" footer link. Writes per-site factor to storage on
-  change; the content script reflects it live.
+  reset button, a "Disable here" toggle (footer) that pauses zoom for the site via
+  `x:<host>`, and an "Options" footer link. Writes per-site factor to storage on
+  change; the content script reflects it live. While paused it shows "Off", dims the
+  controls, and disables them.
 
 - `extension/options.html` / `extension/options.js`
   The options page (also reachable from the popup footer). Three sections: a global
@@ -215,6 +219,11 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   level (including 100% when the default differs), set it explicitly in the options
   site manager. content.js resolves a site's factor as `z:<host>` if present, else
   `cfg:defaultZoom`, else 1.0, and re-resolves live when either key changes.
+- Per-site disable: `x:<hostname>` = `true` pauses zoom for that host. When set,
+  content.js holds the page at its natural 100% (ignoring `z:<host>` and the default)
+  and the keyboard/commands are inert; the badge shows "off". The `z:<host>` factor is
+  left intact, so removing `x:<host>` restores the previous level live. Absence means
+  enabled. Written by the popup "Disable here" toggle.
 
 Keying is by `location.hostname`. This matches ZPWE's "treat domain and subdomains as
 separate sites" behavior: `x.com`, `www.x.com`, and `sub.x.com` are independent, and
@@ -277,11 +286,18 @@ remain open.
 ### Newly surfaced (from real-world ZPWE feedback)
 
 See `docs/chrome-web-store-buglist.md` for a triaged list of issues reported against
-the original Zoom Page WE. The highest-signal candidates for this rewrite: a per-site
-exclusion / disable list (the most-requested feature, and the workaround for sites
-that misbehave under zoom), CSS-zoom site-compat bugs (e.g. cursor hit-offset at
-non-100% zoom on map/overlay UIs), and a durable persistence regression test. These
-are not yet scheduled.
+the original Zoom Page WE. Status of the highest-signal candidates for this rewrite:
+
+- Per-site disable / pause [DONE for the core]. The popup "Disable here" toggle writes
+  `x:<host>`; content.js holds the site at 100% and the keyboard/commands no-op; the
+  badge shows "off". This is the most-requested feature and the workaround for sites
+  that misbehave under zoom (buglist #3 chatgpt.com, #14). Remaining follow-ups: surface
+  and manage `x:` sites in the options page, include them in JSON export/import (today
+  export covers only `z:*` and `cfg:defaultZoom`), and decide whether a paused site
+  should also restore native browser zoom (currently it stays suppressed, so no bubble).
+- CSS-zoom site-compat bugs (e.g. cursor hit-offset at non-100% zoom on map/overlay
+  UIs) - OPEN.
+- A durable persistence regression test (incognito + restart + new tab) - OPEN.
 
 ## 10. Manual test checklist
 
@@ -304,6 +320,10 @@ are not yet scheduled.
 - Click "Fit width" in the popup on a wide site. Confirm the page reflows so its width
   fits the window and the percent/badge update. On a normal-width site, confirm it
   stays near 100%.
+- On a zoomed site, open the popup and check "Disable here". Confirm the page drops to
+  100%, the popup shows "Off" with dimmed controls, and the badge shows "off". Confirm
+  Ctrl +/- and Alt+Shift do nothing while paused. Uncheck it and confirm the previous
+  zoom level returns. Reload the page and confirm it stays paused until you re-enable.
 - Open Options (popup footer). Set the default zoom to 125%, then open a site you have
   never customized. Confirm it renders at 125%. Set that site explicitly to a different
   level and confirm it overrides the default; remove it and confirm it follows the

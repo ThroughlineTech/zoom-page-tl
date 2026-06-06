@@ -23,6 +23,9 @@ zoom only. See `HANDOFF.md` for the full design rationale and the engineering br
   keys keep working - they drive this extension's per-site zoom, with no zoom bubble).
   `Alt+Shift+Up / Down / 0` do the same and are rebindable at
   `chrome://extensions/shortcuts`; AutoFit has a command there with no default key.
+- "Disable here" (popup footer) pauses zooming on the current site: it renders at 100%
+  and the keys do nothing, while keeping your saved level for when you re-enable. Use it
+  for sites that misbehave under zoom. The badge shows "off" while paused.
 - The toolbar badge shows the current site's zoom percent.
 - "Options" (popup footer, or the extension's options page) lets you set a global
   default zoom for new sites, manage every saved site, and import/export your

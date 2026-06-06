@@ -5,10 +5,12 @@ const PRESETS = [0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0];
 let currentTab = null;
 let currentHost = "";
 let currentFactor = 1.0;
+let currentDisabled = false;
 
 const $host = document.getElementById("host");
 const $pct = document.getElementById("pct");
 const $presets = document.getElementById("presets");
+const $disable = document.getElementById("disable");
 
 function pctText(f) {
   return Math.round(f * 100) + "%";
@@ -16,12 +18,21 @@ function pctText(f) {
 
 function render() {
   $host.textContent = currentHost || "(no site)";
-  $pct.textContent = pctText(currentFactor);
-  // mark the matching preset
+  $pct.textContent = currentDisabled ? "Off" : pctText(currentFactor);
+  document.body.classList.toggle("off", currentDisabled);
+  $disable.checked = currentDisabled;
+  // Mark the matching preset, and make the zoom controls inert while paused.
   [...$presets.children].forEach((btn) => {
     const v = parseFloat(btn.dataset.v);
-    btn.classList.toggle("on", Math.abs(v - currentFactor) < 1e-6);
+    btn.classList.toggle(
+      "on",
+      !currentDisabled && Math.abs(v - currentFactor) < 1e-6
+    );
+    btn.disabled = currentDisabled;
   });
+  for (const id of ["in", "out", "fit", "reset"]) {
+    document.getElementById(id).disabled = currentDisabled;
+  }
 }
 
 async function persist() {
@@ -63,6 +74,23 @@ document.getElementById("reset").addEventListener("click", () =>
   setFactor(1.0)
 );
 
+// Disable (pause) zoom on this site. Writes x:<host>; the content script
+// un-zooms/re-zooms live and the service worker updates the badge.
+$disable.addEventListener("change", async () => {
+  if (!currentHost) {
+    $disable.checked = false;
+    return;
+  }
+  currentDisabled = $disable.checked;
+  const xKey = "x:" + currentHost;
+  if (currentDisabled) {
+    await chrome.storage.local.set({ [xKey]: true });
+  } else {
+    await chrome.storage.local.remove(xKey);
+  }
+  render();
+});
+
 // AutoFit runs in the content script (it needs a live measurement). It writes
 // storage itself, so we just reflect the returned factor in the popup UI.
 document.getElementById("fit").addEventListener("click", async () => {
@@ -99,8 +127,12 @@ document.getElementById("options").addEventListener("click", () => {
     currentHost = "";
   }
   if (currentHost) {
-    const res = await chrome.storage.local.get(hostKey(currentHost));
+    const res = await chrome.storage.local.get([
+      hostKey(currentHost),
+      "x:" + currentHost,
+    ]);
     currentFactor = res[hostKey(currentHost)] || 1.0;
+    currentDisabled = !!res["x:" + currentHost];
   }
   render();
 })();
