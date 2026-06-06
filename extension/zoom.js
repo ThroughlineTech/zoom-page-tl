@@ -1,6 +1,7 @@
-// Shared constants/helpers. Loaded as a plain script in popup; inlined logic
-// duplicated minimally in background.js (service workers can't import this
-// without module plumbing, and it's two functions).
+// Shared constants/helpers. Loaded as a plain script in the popup and as the
+// first content script (before content.js), so both can use stepFrom for the
+// zoom ladder. The same two functions are duplicated minimally in background.js
+// (service workers can't import this without module plumbing).
 
 const ZOOM_STEPS = [
   0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9,

@@ -124,9 +124,14 @@ Reference: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtension
 
 ### commands (keyboard) reserved keys
 - Chrome reserves Ctrl with +, -, and 0 for browser zoom and will not let extensions
-  bind them. We use `Alt+Shift+Up / Down / 0`. Users can rebind at
-  `chrome://extensions/shortcuts`. With browser zoom disabled, Ctrl +/-/0 are inert
-  anyway.
+  bind them as commands. We expose two paths:
+  - `Alt+Shift+Up / Down / 0` are real `commands` (rebindable at
+    `chrome://extensions/shortcuts`), handled in the service worker.
+  - `Ctrl +/-/0` are intercepted in the content script (`keydown`, capture phase,
+    `preventDefault`) and drive the same per-site CSS zoom. This works precisely
+    because browser zoom is disabled, so the native Ctrl +/-/0 are inert and ours
+    are the only effect. (These are not rebindable; they are page-level key handling,
+    not extension commands.)
 
 ## 6. File-by-file walkthrough
 
@@ -134,26 +139,32 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
 
 - `extension/manifest.json`
   MV3 manifest. Permissions: `storage`, `tabs`. `host_permissions`: `<all_urls>`.
-  One `document_start` content script on `<all_urls>`, top frame only. An action with
-  the popup. Three commands (zoom-in, zoom-out, zoom-reset).
+  One `document_start` content-script entry on `<all_urls>`, top frame only, loading
+  `zoom.js` then `content.js`. An action with the popup. Four commands (zoom-in,
+  zoom-out, zoom-reset, zoom-autofit; the last has no default key).
 
 - `extension/content.js`
   Runs at `document_start`. Reads `z:<hostname>` from `chrome.storage.local` and sets
   `document.documentElement.style.zoom`. Subscribes to `storage.onChanged` so changes
-  from the popup or keyboard apply live without a reload. Wrapped in try/catch for
-  pages where the extension context is unavailable.
+  from the popup or keyboard apply live without a reload. Also intercepts `Ctrl +/-/0`
+  (`keydown`, capture, `preventDefault`) and steps the per-site CSS zoom via `stepFrom`
+  (from `zoom.js`, loaded first). Wrapped in try/catch for pages where the extension
+  context is unavailable.
 
 - `extension/background.js`
   Service worker. On `tabs.onUpdated` (status loading) and `tabs.onActivated`, calls
   `setZoomSettings({ mode: "disabled" })` to keep the bubble suppressed, and refreshes
-  the toolbar badge to the current site's percent. Handles the keyboard commands by
+  the toolbar badge to the current site's percent. A `storage.onChanged` listener also
+  refreshes the active tab's badge so in-place edits (the content-script Ctrl +/- keys,
+  the popup, the options page) keep the badge in sync. Handles the keyboard commands by
   stepping the active site's factor and writing it back to storage. Contains its own
   copy of `ZOOM_STEPS` and `stepFrom` because service workers cannot easily share the
   popup's plain script.
 
 - `extension/zoom.js`
-  Shared helpers for the popup: `ZOOM_STEPS`, `hostKey`, `stepFrom`. Loaded as a plain
-  script before `popup.js`. (Background duplicates these two functions intentionally.)
+  Shared helpers: `ZOOM_STEPS`, `hostKey`, `stepFrom`. Loaded as a plain script before
+  `popup.js`, and as the first content script before `content.js` (so the Ctrl +/- keys
+  can use `stepFrom`). (Background duplicates these two functions intentionally.)
 
 - `extension/popup.html` / `extension/popup.js`
   The toolbar popup. Native-feeling, light/dark aware. Shows the current hostname and
@@ -280,6 +291,9 @@ are not yet scheduled.
   tracks the active tab.
 - Use Alt+Shift+Up / Down / 0 on a normal page. Confirm step in/out and reset, badge
   updates, no bubble.
+- Use Ctrl +, Ctrl -, and Ctrl 0 on a normal page. Confirm step in/out and reset, badge
+  updates, and NO native zoom bubble appears (these drive the CSS zoom, not browser
+  zoom). Try the numpad +/-/0 too.
 - Navigate to chrome://settings. Confirm no errors in the service worker console and
   the action simply does nothing harmful.
 - Set a site back to 100% and confirm its storage key is removed (check via the popup

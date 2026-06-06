@@ -19,9 +19,10 @@ zoom only. See `HANDOFF.md` for the full design rationale and the engineering br
 - Click the toolbar button to set the zoom level for the current site. The level is
   remembered per hostname.
 - "Fit width" in the popup AutoFits the zoom so the page width matches the window.
-- Keyboard: `Alt+Shift+Up` zoom in, `Alt+Shift+Down` zoom out, `Alt+Shift+0` reset.
-  AutoFit has a command with no default key; bind it (and rebind the others) at
-  `chrome://extensions/shortcuts`.
+- Keyboard: `Ctrl +` zoom in, `Ctrl -` zoom out, `Ctrl 0` reset (the familiar zoom
+  keys keep working - they drive this extension's per-site zoom, with no zoom bubble).
+  `Alt+Shift+Up / Down / 0` do the same and are rebindable at
+  `chrome://extensions/shortcuts`; AutoFit has a command there with no default key.
 - The toolbar badge shows the current site's zoom percent.
 - "Options" (popup footer, or the extension's options page) lets you set a global
   default zoom for new sites, manage every saved site, and import/export your

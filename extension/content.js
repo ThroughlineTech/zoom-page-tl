@@ -102,4 +102,48 @@
   } catch (e) {
     /* ignore */
   }
+
+  // Ctrl +/-/0 zoom. Chrome reserves Ctrl with +, -, and 0 for browser zoom and
+  // will not let an extension bind them as commands; and because we keep browser
+  // zoom disabled, those keys are otherwise inert. So intercept them here and
+  // drive the same per-site CSS zoom ladder as the popup and the Alt+Shift
+  // commands (stepFrom comes from zoom.js, loaded before this script). We only
+  // write storage; the storage.onChanged handler above applies it, which also
+  // resolves the global default correctly when a reset removes the key.
+  function stepZoom(dir) {
+    try {
+      chrome.storage.local.get([key, DEFAULT_KEY], (res) => {
+        if (chrome.runtime.lastError) return;
+        const next = dir === 0 ? 1.0 : stepFrom(resolve(res), dir);
+        if (Math.abs(next - 1.0) < 1e-6) {
+          chrome.storage.local.remove(key); // 100% => store nothing
+        } else {
+          chrome.storage.local.set({ [key]: next });
+        }
+      });
+    } catch (e) {
+      /* extension context unavailable on some restricted pages */
+    }
+  }
+
+  try {
+    window.addEventListener(
+      "keydown",
+      (e) => {
+        // Require Ctrl, allow Shift (Ctrl++ is Ctrl+Shift+=), exclude Alt/Meta
+        // (Alt+Shift+* is the command set; Meta is OS-level).
+        if (!e.ctrlKey || e.altKey || e.metaKey) return;
+        let dir;
+        if (e.key === "+" || e.key === "=" || e.code === "NumpadAdd") dir = 1;
+        else if (e.key === "-" || e.key === "_" || e.code === "NumpadSubtract") dir = -1;
+        else if (e.key === "0" || e.code === "Numpad0") dir = 0;
+        else return;
+        e.preventDefault();
+        stepZoom(dir);
+      },
+      { capture: true }
+    );
+  } catch (e) {
+    /* ignore */
+  }
 })();

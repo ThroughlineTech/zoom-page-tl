@@ -85,6 +85,22 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   }
 });
 
+// Keep the active tab's badge in sync when the zoom data changes from anywhere:
+// the content-script Ctrl +/- keys, the popup, or the options page. (Tab events
+// above cover navigation and activation; this covers in-place edits.)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local") refreshActiveBadge();
+});
+
+async function refreshActiveBadge() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) await refreshBadge(tab.id, hostOf(tab.url));
+  } catch (e) {
+    /* ignore */
+  }
+}
+
 // Keyboard commands operate on the active tab's site.
 chrome.commands.onCommand.addListener(async (command) => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
