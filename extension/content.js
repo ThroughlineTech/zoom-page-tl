@@ -16,17 +16,18 @@
   if (!host) return; // about:, data:, etc.
   const key = "z:" + host;
   const DEFAULT_KEY = "cfg:defaultZoom"; // global default for un-customized sites
-  const disabledKey = "x:" + host; // when set, zoom is paused for this host
+  const excludedKey = "x:" + host; // when set, this site is excluded (never zoom)
+  const pausedKey = "p:" + host; // when set, zoom is paused (temporarily) for this host
   const autoKey = "af:" + host; // when set, this site is in auto-fit mode
 
   const MIN = 0.25;
   const MAX = 5.0;
 
-  // Cached state, kept current by refresh(): `disabled` lets the keydown handler
-  // decide synchronously whether to let Ctrl +/- through; `autoMode` says the
-  // site re-fits on load/resize; `desired` is the factor we want on <html>, used
-  // to re-assert if the page clobbers it.
-  let disabled = false;
+  // Cached state, kept current by refresh(): `suppressed` (excluded OR paused)
+  // lets the keydown handler decide synchronously whether to let Ctrl +/- through;
+  // `autoMode` says the site re-fits on load/resize; `desired` is the factor we
+  // want on <html>, used to re-assert if the page clobbers it.
+  let suppressed = false;
   let autoMode = false;
   let desired = 1.0;
 
@@ -49,14 +50,17 @@
 
   function refresh() {
     try {
-      chrome.storage.local.get([key, DEFAULT_KEY, disabledKey, autoKey], (res) => {
-        if (chrome.runtime.lastError) return;
-        disabled = !!res[disabledKey];
-        autoMode = !disabled && !!res[autoKey];
-        // Paused on this site: leave the page at its natural 100%, ignoring any
-        // stored factor and the global default.
-        apply(disabled ? 1.0 : resolve(res));
-      });
+      chrome.storage.local.get(
+        [key, DEFAULT_KEY, excludedKey, pausedKey, autoKey],
+        (res) => {
+          if (chrome.runtime.lastError) return;
+          suppressed = !!res[excludedKey] || !!res[pausedKey];
+          autoMode = !suppressed && !!res[autoKey];
+          // Excluded or paused on this site: leave the page at its natural 100%,
+          // ignoring any stored factor and the global default.
+          apply(suppressed ? 1.0 : resolve(res));
+        }
+      );
     } catch (e) {
       /* extension context can be unavailable on some restricted pages */
     }
@@ -68,14 +72,15 @@
 
   // Live updates: popup, keyboard command, or options page writes storage;
   // reflect instantly without a reload. React to this site's key, the global
-  // default, the paused flag, and the auto-fit flag.
+  // default, the excluded/paused flags, and the auto-fit flag.
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "local") return;
       if (
         changes[key] ||
         changes[DEFAULT_KEY] ||
-        changes[disabledKey] ||
+        changes[excludedKey] ||
+        changes[pausedKey] ||
         changes[autoKey]
       ) {
         refresh();
@@ -165,8 +170,8 @@
   }
 
   async function autofit() {
-    const dis = await chrome.storage.local.get(disabledKey);
-    if (dis[disabledKey]) return { factor: 1, fits: true }; // paused; do nothing
+    const st = await chrome.storage.local.get([excludedKey, pausedKey]);
+    if (st[excludedKey] || st[pausedKey]) return { factor: 1, fits: true }; // suppressed; do nothing
     const { factor, fits } = computeAutofitFactor();
     apply(factor);
     if (Math.abs(factor - 1.0) < 1e-6) {
@@ -200,9 +205,9 @@
   // resolves the global default correctly when a reset removes the key.
   function stepZoom(dir) {
     try {
-      chrome.storage.local.get([key, DEFAULT_KEY, disabledKey], (res) => {
+      chrome.storage.local.get([key, DEFAULT_KEY, excludedKey, pausedKey], (res) => {
         if (chrome.runtime.lastError) return;
-        if (res[disabledKey]) return; // paused on this site; the keys do nothing
+        if (res[excludedKey] || res[pausedKey]) return; // suppressed; the keys do nothing
         const next = dir === 0 ? 1.0 : stepFrom(resolve(res), dir);
         chrome.storage.local.remove(autoKey); // manual zoom -> leave auto-fit mode
         if (Math.abs(next - 1.0) < 1e-6) {
@@ -220,9 +225,9 @@
     window.addEventListener(
       "keydown",
       (e) => {
-        // Paused on this site: do not touch the keys at all. Leaving them
-        // un-prevented lets Chrome's native Ctrl +/- (and its bubble) work.
-        if (disabled) return;
+        // Excluded or paused on this site: do not touch the keys at all. Leaving
+        // them un-prevented lets Chrome's native Ctrl +/- (and its bubble) work.
+        if (suppressed) return;
         // Require Ctrl, allow Shift (Ctrl++ is Ctrl+Shift+=), exclude Alt/Meta
         // (Alt+Shift+* is the command set; Meta is OS-level).
         if (!e.ctrlKey || e.altKey || e.metaKey) return;
@@ -246,7 +251,7 @@
   // defense; this is the second.) The apply() guard keeps this from fighting the
   // AutoFit measurement (apply() updates `desired`, so re-assert sees a match).
   function reassert() {
-    if (disabled) return;
+    if (suppressed) return;
     const cur = document.documentElement.style.zoom;
     const curN = cur ? parseFloat(cur) : 1.0;
     if (Math.abs(curN - desired) > 0.005) apply(desired);
@@ -268,7 +273,7 @@
   try {
     // Wholesale <html> replacement: re-apply and re-attach the style observer.
     new MutationObserver(() => {
-      if (disabled) return;
+      if (suppressed) return;
       apply(desired);
       watchStyle();
     }).observe(document, { childList: true });
@@ -287,9 +292,10 @@
     // stale here. Storage is authoritative at fire time.
     refitTimer = setTimeout(() => {
       try {
-        chrome.storage.local.get([disabledKey, autoKey], (res) => {
+        chrome.storage.local.get([excludedKey, pausedKey, autoKey], (res) => {
           if (chrome.runtime.lastError) return;
-          if (res[autoKey] && !res[disabledKey]) autofit().catch(() => {});
+          if (res[autoKey] && !res[excludedKey] && !res[pausedKey])
+            autofit().catch(() => {});
         });
       } catch (e) {
         /* ignore */

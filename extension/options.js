@@ -1,16 +1,18 @@
-// Options page logic: global default zoom, manage-list of saved sites, and
-// JSON import/export. hostKey() comes from zoom.js.
+// Options page logic: global default zoom, an Active/Excluded manage-list of
+// saved sites, and JSON import/export. hostKey() comes from zoom.js.
 //
 // The pure storage operations are also exposed on window.ZP so the test suite
-// can exercise import/export deterministically without driving a file dialog.
+// can exercise them deterministically without driving a file dialog.
 
 const DEFAULT_KEY = "cfg:defaultZoom";
 const MIN = 0.25;
 const MAX = 5.0;
 
 const $default = document.getElementById("default");
-const $sites = document.getElementById("sites");
-const $empty = document.getElementById("empty");
+const $active = document.getElementById("active");
+const $excluded = document.getElementById("excluded");
+const $activeEmpty = document.getElementById("activeEmpty");
+const $excludedEmpty = document.getElementById("excludedEmpty");
 const $status = document.getElementById("status");
 const $replace = document.getElementById("replace");
 const $importFile = document.getElementById("importFile");
@@ -57,40 +59,58 @@ async function setSite(host, factor) {
   }
 }
 
-// Pause / resume a site (the popup's "Disable here", manageable from here too).
-// Writes x:<host>; content.js holds the page at 100% and hands native zoom back
-// to Chrome. The z: level is left intact so resuming restores it.
-async function setPaused(host, paused) {
+// Exclude (x:, never zoom) / include a site. Excluding supersedes a pause, so it
+// also clears p:<host>, leaving the site cleanly "never".
+async function setExcluded(host, excluded) {
   if (!host) return;
   const xKey = "x:" + host;
-  if (paused) {
+  if (excluded) {
     await chrome.storage.local.set({ [xKey]: true });
+    await chrome.storage.local.remove("p:" + host);
   } else {
     await chrome.storage.local.remove(xKey);
   }
 }
 
-// Forget a site entirely: drop its level, pause flag, and auto-fit mode.
-async function removeSite(host) {
-  await chrome.storage.local.remove([hostKey(host), "x:" + host, "af:" + host]);
+// Pause (p:, suspend for now) / resume a site. The z: level is left intact so
+// resuming restores it.
+async function setPaused(host, paused) {
+  if (!host) return;
+  const pKey = "p:" + host;
+  if (paused) {
+    await chrome.storage.local.set({ [pKey]: true });
+  } else {
+    await chrome.storage.local.remove(pKey);
+  }
 }
 
-// Every customized site: those with a stored level (z:) and those that are only
-// paused (x: with no level). factor is the stored level or null when absent.
+// Forget a site entirely: drop its level, exclude/pause flags, and auto-fit mode.
+async function removeSite(host) {
+  await chrome.storage.local.remove([
+    hostKey(host),
+    "x:" + host,
+    "p:" + host,
+    "af:" + host,
+  ]);
+}
+
+// Every customized site, with its state. factor is the stored level or null;
+// excluded = x: (never zoom); paused = p: (suspended for now).
 async function listSites() {
   const all = await chrome.storage.local.get(null);
   const byHost = new Map();
   const entry = (host) => {
     let e = byHost.get(host);
     if (!e) {
-      e = { host, factor: null, paused: false };
+      e = { host, factor: null, excluded: false, paused: false };
       byHost.set(host, e);
     }
     return e;
   };
   for (const k of Object.keys(all)) {
     if (k.startsWith("z:")) entry(k.slice(2)).factor = all[k];
-    else if (k.startsWith("x:")) entry(k.slice(2)).paused = true;
+    else if (k.startsWith("x:")) entry(k.slice(2)).excluded = true;
+    else if (k.startsWith("p:")) entry(k.slice(2)).paused = true;
   }
   const sites = [...byHost.values()];
   sites.sort((a, b) => a.host.localeCompare(b.host));
@@ -100,22 +120,28 @@ async function listSites() {
 async function exportData() {
   const all = await chrome.storage.local.get(null);
   const sites = {};
+  const excluded = [];
   for (const k of Object.keys(all)) {
     if (k.startsWith("z:")) sites[k.slice(2)] = all[k];
+    else if (k.startsWith("x:")) excluded.push(k.slice(2));
   }
-  return { version: 1, defaultZoom: all[DEFAULT_KEY] || 1.0, sites };
+  excluded.sort((a, b) => a.localeCompare(b));
+  return { version: 1, defaultZoom: all[DEFAULT_KEY] || 1.0, sites, excluded };
 }
 
-// Returns the number of site entries written.
+// Returns the number of site (level) entries written. Excluded hosts are applied
+// too (as x: flags) but not counted here. Pause (p:) is transient: never
+// exported, never touched on import.
 async function importData(obj, opts) {
   const replace = !!(opts && opts.replace);
   if (!obj || typeof obj !== "object") throw new Error("not an object");
   const sites = obj.sites && typeof obj.sites === "object" ? obj.sites : {};
+  const excluded = Array.isArray(obj.excluded) ? obj.excluded : [];
 
   if (replace) {
     const all = await chrome.storage.local.get(null);
     const drop = Object.keys(all).filter(
-      (k) => k.startsWith("z:") || k === DEFAULT_KEY
+      (k) => k.startsWith("z:") || k.startsWith("x:") || k === DEFAULT_KEY
     );
     if (drop.length) await chrome.storage.local.remove(drop);
   }
@@ -132,6 +158,10 @@ async function importData(obj, opts) {
       writes[hostKey(host)] = f;
       count++;
     }
+  }
+
+  for (const host of excluded) {
+    if (host && typeof host === "string") writes["x:" + host] = true;
   }
 
   if ("defaultZoom" in obj) {
@@ -155,69 +185,107 @@ async function renderDefault() {
   $default.value = pct(await getDefault());
 }
 
+function makeButton(label, onClick) {
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+function makeRemoveButton(host) {
+  const rm = makeButton("Remove", async () => {
+    await removeSite(host);
+    await renderSites();
+    setStatus(`Removed ${host}.`);
+  });
+  rm.className = "remove";
+  return rm;
+}
+
+function makeRow(site, def) {
+  const { host, factor, excluded, paused } = site;
+  const tr = document.createElement("tr");
+  if (excluded) tr.className = "excluded";
+  else if (paused) tr.className = "paused";
+
+  const tdHost = document.createElement("td");
+  tdHost.className = "host";
+  tdHost.textContent = host;
+  if (paused && !excluded) {
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = "Paused";
+    tdHost.append(" ", tag);
+  }
+
+  const tdLvl = document.createElement("td");
+  tdLvl.className = "lvl";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "25";
+  input.max = "500";
+  input.step = "5";
+  // Excluded/paused sites have no live level; show the level they would use
+  // (their stored one, or the default) but disable editing - include/resume first.
+  input.value = pct(factor != null ? factor : def);
+  input.disabled = excluded || paused;
+  if (input.disabled) {
+    input.title = excluded
+      ? "Include the site to change its level"
+      : "Resume the site to change its level";
+  }
+  input.addEventListener("change", async () => {
+    await setSite(host, Number(input.value) / 100);
+    await renderSites();
+    setStatus(`Updated ${host}.`);
+  });
+  const span = document.createElement("span");
+  span.textContent = " %";
+  tdLvl.append(input, span);
+
+  const tdAct = document.createElement("td");
+  tdAct.className = "act";
+  if (excluded) {
+    tdAct.append(
+      makeButton("Include", async () => {
+        await setExcluded(host, false);
+        await renderSites();
+        setStatus(`Included ${host}.`);
+      }),
+      makeRemoveButton(host)
+    );
+  } else {
+    tdAct.append(
+      makeButton(paused ? "Resume" : "Pause", async () => {
+        await setPaused(host, !paused);
+        await renderSites();
+        setStatus(paused ? `Resumed ${host}.` : `Paused ${host}.`);
+      }),
+      makeButton("Exclude", async () => {
+        await setExcluded(host, true);
+        await renderSites();
+        setStatus(`Excluded ${host}.`);
+      }),
+      makeRemoveButton(host)
+    );
+  }
+
+  tr.append(tdHost, tdLvl, tdAct);
+  return tr;
+}
+
 async function renderSites() {
   const [sites, def] = await Promise.all([listSites(), getDefault()]);
-  $sites.textContent = "";
-  $empty.hidden = sites.length > 0;
+  const active = sites.filter((s) => !s.excluded);
+  const excluded = sites.filter((s) => s.excluded);
 
-  for (const { host, factor, paused } of sites) {
-    const tr = document.createElement("tr");
-    if (paused) tr.className = "paused";
+  $active.textContent = "";
+  for (const s of active) $active.appendChild(makeRow(s, def));
+  $activeEmpty.hidden = active.length > 0;
 
-    const tdHost = document.createElement("td");
-    tdHost.className = "host";
-    tdHost.textContent = host;
-    if (paused) {
-      const tag = document.createElement("span");
-      tag.className = "tag";
-      tag.textContent = "Paused";
-      tdHost.append(" ", tag);
-    }
-
-    const tdLvl = document.createElement("td");
-    tdLvl.className = "lvl";
-    const input = document.createElement("input");
-    input.type = "number";
-    input.min = "25";
-    input.max = "500";
-    input.step = "5";
-    // A paused-only site has no stored level; show the default it will follow.
-    input.value = pct(factor != null ? factor : def);
-    // Zoom is inert while paused (like the popup's dimmed controls); resume to edit.
-    input.disabled = paused;
-    if (paused) input.title = "Resume the site to change its level";
-    input.addEventListener("change", async () => {
-      await setSite(host, Number(input.value) / 100);
-      await renderSites();
-      setStatus(`Updated ${host}.`);
-    });
-    const span = document.createElement("span");
-    span.textContent = " %";
-    tdLvl.append(input, span);
-
-    const tdAct = document.createElement("td");
-    tdAct.className = "act";
-    const toggle = document.createElement("button");
-    toggle.className = "toggle";
-    toggle.textContent = paused ? "Resume" : "Pause";
-    toggle.addEventListener("click", async () => {
-      await setPaused(host, !paused);
-      await renderSites();
-      setStatus(paused ? `Resumed ${host}.` : `Paused ${host}.`);
-    });
-    const rm = document.createElement("button");
-    rm.className = "remove";
-    rm.textContent = "Remove";
-    rm.addEventListener("click", async () => {
-      await removeSite(host);
-      await renderSites();
-      setStatus(`Removed ${host}.`);
-    });
-    tdAct.append(toggle, rm);
-
-    tr.append(tdHost, tdLvl, tdAct);
-    $sites.appendChild(tr);
-  }
+  $excluded.textContent = "";
+  for (const s of excluded) $excluded.appendChild(makeRow(s, def));
+  $excludedEmpty.hidden = excluded.length > 0;
 }
 
 async function renderAll() {
@@ -241,6 +309,12 @@ function downloadJson(obj, filename) {
   URL.revokeObjectURL(url);
 }
 
+function summary(n, x) {
+  const parts = [`${n} site${n === 1 ? "" : "s"}`];
+  if (x) parts.push(`${x} excluded`);
+  return parts.join(", ");
+}
+
 // --- wiring ---
 
 $default.addEventListener("change", async () => {
@@ -258,8 +332,7 @@ document.getElementById("defaultReset").addEventListener("click", async () => {
 document.getElementById("export").addEventListener("click", async () => {
   const data = await exportData();
   downloadJson(data, "zoom-page-tl-backup.json");
-  const n = Object.keys(data.sites).length;
-  setStatus(`Exported ${n} site${n === 1 ? "" : "s"}.`);
+  setStatus(`Exported ${summary(Object.keys(data.sites).length, data.excluded.length)}.`);
 });
 
 document.getElementById("importBtn").addEventListener("click", () => {
@@ -273,8 +346,9 @@ $importFile.addEventListener("change", async () => {
     const text = await file.text();
     const obj = JSON.parse(text);
     const n = await importData(obj, { replace: $replace.checked });
+    const x = Array.isArray(obj.excluded) ? obj.excluded.length : 0;
     await renderAll();
-    setStatus(`Imported ${n} site${n === 1 ? "" : "s"}.`);
+    setStatus(`Imported ${summary(n, x)}.`);
   } catch (e) {
     setStatus("Import failed: " + e.message);
   } finally {
@@ -295,6 +369,7 @@ window.ZP = {
   getDefault,
   setDefault,
   setSite,
+  setExcluded,
   setPaused,
   removeSite,
   listSites,

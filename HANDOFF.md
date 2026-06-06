@@ -149,9 +149,11 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   `document.documentElement.style.zoom`. Subscribes to `storage.onChanged` so changes
   from the popup or keyboard apply live without a reload. Also intercepts `Ctrl +/-/0`
   (`keydown`, capture, `preventDefault`) and steps the per-site CSS zoom via `stepFrom`
-  (from `zoom.js`, loaded first). Honors `x:<hostname>`: when set, it holds the page at
-  100% and leaves Ctrl +/- to the browser (it does not preventDefault them), so native
-  zoom works there. Re-asserts the desired factor if the page clobbers it - a
+  (from `zoom.js`, loaded first). Honors the two suppression flags `x:<hostname>`
+  (excluded - never zoom) and `p:<hostname>` (paused - suspended for now): when either is
+  set it holds the page at 100% and leaves Ctrl +/- to the browser (it does not
+  preventDefault them), so native zoom works there. Re-asserts the desired factor if the
+  page clobbers it - a
   MutationObserver on the `<html>` style attribute plus a `document` childList observer
   for wholesale `<html>` replacement (this is what keeps re-rendering sites like cnn.com
   stable, and it is why a stored zoom survives the load churn). For `af:<host>` (auto-fit)
@@ -169,10 +171,11 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   the factor the same way content.js does (`z:<host>` -> `cfg:defaultZoom` -> 1.0), so
   both the command stepping base and the badge are default-aware: with a non-100% global
   default, "zoom in" steps up from what is on screen and the badge shows that percent.
-  Honors `x:<hostname>`: on a paused site the commands no-op, the badge shows a gray
-  "off", and `applyZoomMode` sets the tab to `"automatic"` (not `"disabled"`) so native
-  browser zoom works. A `storage.onChanged` listener (`syncActiveTab`) re-applies the
-  mode and badge live, so pausing/resuming takes effect without a reload. Contains its
+  Honors the suppression flags via `isSuppressed` (`x:<host>` excluded OR `p:<host>`
+  paused): on a suppressed site the commands no-op, the badge shows a gray "off", and
+  `applyZoomMode` sets the tab to `"automatic"` (not `"disabled"`) so native browser zoom
+  works. A `storage.onChanged` listener (`syncActiveTab`) re-applies the mode and badge
+  live, so excluding/pausing takes effect without a reload. Contains its
   own copy of `ZOOM_STEPS` and `stepFrom` because service workers cannot easily share
   the popup's plain script.
 
@@ -184,22 +187,26 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
 - `extension/popup.html` / `extension/popup.js`
   The toolbar popup. Native-feeling, light/dark aware. Shows the current hostname and
   percent, a minus/plus stepper, a preset grid, a "Fit width" (AutoFit) button, a
-  reset button, a "Disable here" toggle (footer) that pauses zoom for the site via
-  `x:<host>`, and an "Options" footer link. Writes per-site factor to storage on
-  change; the content script reflects it live. "Fit width" enters auto-fit mode
-  (`af:<host>`) and stays highlighted while active; any manual zoom clears it. While
-  paused it shows "Off", dims the controls, and disables them.
+  reset button, two footer toggles - "Pause" (suspend zoom for now, `p:<host>`) and
+  "Exclude" (never zoom, `x:<host>`) - and an "Options" footer link. Writes per-site
+  factor to storage on change; the content script reflects it live. "Fit width" enters
+  auto-fit mode (`af:<host>`) and stays highlighted while active; any manual zoom clears
+  it. While suppressed it shows "Paused"/"Off", dims the controls, and disables them;
+  excluding supersedes a pause (it clears `p:` and disables the Pause toggle).
 
 - `extension/options.html` / `extension/options.js`
   The options page (also reachable from the popup footer). Three sections: a global
-  default zoom for un-customized sites (stored under `cfg:defaultZoom`); a manage-list
-  of every customized site with inline level editing, a per-row Pause/Resume toggle,
-  and per-row remove; and JSON import/export of all levels. The site manager lists the
-  union of sites that have a level (`z:`) AND sites that are only paused (`x:` with no
-  level) - so a site paused from the popup is visible and resumable here, marked with a
-  "Paused" tag and a disabled level field (resume to edit). Remove forgets the site
-  entirely (drops `z:`, `x:`, and `af:`). The pure storage operations are also exposed
-  on `window.ZP` so the test suite can drive them without a file dialog.
+  default zoom for un-customized sites (stored under `cfg:defaultZoom`); a site manager
+  split into an **Active** list and an **Excluded** list; and JSON import/export. The
+  manager lists the union of every customized host (`z:` level, `x:` excluded, or `p:`
+  paused). Active rows have inline level editing, a Pause/Resume toggle, an Exclude
+  button (moves the row to the Excluded list), and Remove; a paused active row shows a
+  "Paused" tag and a disabled level field (resume to edit). Excluded rows show their
+  cached level greyed, an Include button (moves it back to Active), and Remove. Remove
+  forgets the site entirely (drops `z:`, `x:`, `p:`, and `af:`). Each list is in a
+  max-height scroll container (a per-list search filter is a future add as the lists
+  grow). The pure storage operations are also exposed on `window.ZP` so the test suite
+  can drive them without a file dialog.
 
 - `extension/icons/`
   16/32/48/128 PNG magnifier icons (generated, blue rounded square).
@@ -234,15 +241,22 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   level (including 100% when the default differs), set it explicitly in the options
   site manager. content.js resolves a site's factor as `z:<host>` if present, else
   `cfg:defaultZoom`, else 1.0, and re-resolves live when either key changes.
-- Per-site disable: `x:<hostname>` = `true` pauses zoom for that host. When set,
-  content.js holds the page at its natural 100% (ignoring `z:<host>` and the default)
-  and the extension's own zoom is inert; the badge shows "off". The service worker also
-  sets that tab to `setZoomSettings` `"automatic"`, handing native Ctrl +/- (and the
-  browser's zoom bubble) back to Chrome - the deliberate "act as if the extension is not
-  here" behavior for opted-out sites. The `z:<host>` factor is left intact, so removing
-  `x:<host>` restores both the previous level and the `"disabled"` (no-bubble) mode live.
-  Absence means enabled. Written by the popup "Disable here" toggle, and managed from the
-  options site manager (which lists paused-only sites and offers a Pause/Resume toggle).
+- Two suppression flags - `x:<hostname>` (excluded: never zoom) and `p:<hostname>`
+  (paused: suspended for now). Either set to `true` makes content.js hold the page at its
+  natural 100% (ignoring `z:<host>` and the default), the extension's zoom inert, the
+  badge "off", and the service worker sets that tab to `setZoomSettings` `"automatic"` -
+  handing native Ctrl +/- (and the browser's zoom bubble) back to Chrome (the "act as if
+  the extension is not here" behavior). They behave identically on the page; the
+  difference is intent and lifecycle:
+  - **Exclude (`x:`)** is durable ("never on this site"); it lives in the options Excluded
+    list and IS carried in JSON export/import.
+  - **Pause (`p:`)** is meant to be temporary ("a layout broke, suspend for now"); it keeps
+    the site in the Active list (greyed, with Resume) and is NOT exported (transient).
+  The `z:<host>` factor is left intact under both, so removing the flag restores the
+  previous level and the `"disabled"` (no-bubble) mode live. Excluding supersedes a pause:
+  setting `x:` clears any `p:`. Absence of both means enabled. Written by the popup's Pause
+  / Exclude toggles and the options site manager. (Historically `x:` was a single
+  "disable" flag; it is now specifically Exclude, with Pause split out as `p:`.)
 - Auto-fit mode: `af:<hostname>` = `true` marks a site as auto-fit. `z:<host>` still
   holds the applied factor (the cached last fit, so it applies on first paint), but the
   site re-runs AutoFit once the page settles (on `load`, debounced, and on resize) and
@@ -312,10 +326,11 @@ remain open.
    defaulting off to preserve current behavior.
 3. Options page [S to M]. DONE (global default zoom + site manager + import/export).
    The eTLD+1 toggle (item 2) is the remaining piece to add here.
-4. Import/export per-site data [S]. DONE. Export `z:*` keys plus `cfg:defaultZoom` to
-   JSON (`{version, defaultZoom, sites}`); import merges or replaces, clamping values
-   and dropping 100%/invalid entries. Lives in the options page Backup section.
-   Covered by `tests/options.spec.js`.
+4. Import/export per-site data [S]. DONE. Export `z:*` levels, `cfg:defaultZoom`, and the
+   `x:*` exclude list to JSON (`{version, defaultZoom, sites, excluded}`); import merges
+   or replaces (replace also clears existing `z:*`/`x:*`), clamping values and dropping
+   100%/invalid entries. Pause (`p:`) is transient and intentionally not exported. Lives
+   in the options page Backup section. Covered by `tests/options.spec.js`.
 5. chrome.storage.sync option [S]. OPEN. Sync per-site levels across the user's
    signed-in Chrome instances. Watch the sync quota (small); keep local as the source
    of truth and mirror to sync, or make it a toggle.
@@ -344,16 +359,16 @@ remain open.
 See `docs/chrome-web-store-buglist.md` for a triaged list of issues reported against
 the original Zoom Page WE. Status of the highest-signal candidates for this rewrite:
 
-- Per-site disable / pause [DONE for the core]. The popup "Disable here" toggle writes
-  `x:<host>`; content.js holds the site at 100% and the keyboard/commands no-op; the
-  badge shows "off". This is the most-requested feature and the workaround for sites
-  that misbehave under zoom (buglist #3 chatgpt.com, #14). A paused site also restores
-  native browser zoom (the worker sets the tab to `"automatic"`), so Chrome's own
-  Ctrl +/- and zoom bubble work there - DONE. The options site manager now surfaces and
-  manages `x:` sites too: a paused-only site (no `z:` level) appears with a "Paused" tag
-  and a Pause/Resume toggle, and Remove clears `z:`/`x:`/`af:` together
-  (`tests/options.spec.js`) - DONE. Remaining follow-up: include `x:` sites in JSON
-  export/import (today export covers only `z:*` and `cfg:defaultZoom`).
+- Per-site exclude + pause [DONE]. Split into two flags: Exclude (`x:`, never zoom -
+  durable, the blocklist) and Pause (`p:`, suspend for now - transient, e.g. a layout
+  broke). Either holds the site at 100%, no-ops the keyboard/commands, shows the "off"
+  badge, and restores native browser zoom (`"automatic"`) - the workaround for sites that
+  misbehave under zoom (buglist #3 chatgpt.com, #14). The popup has Pause + Exclude
+  toggles; the options site manager splits into an Active list and an Excluded list and
+  surfaces exclude-only / paused sites for management (Pause/Resume, Exclude/Include,
+  Remove clears `z:`/`x:`/`p:`/`af:`). Exclude is carried in JSON export/import (the
+  `excluded` array); pause is transient and not exported. Covered by
+  `tests/exclude.spec.js`, `tests/pause.spec.js`, `tests/options.spec.js` - DONE.
 - CSS-zoom site-compat bugs (e.g. cursor hit-offset at non-100% zoom on map/overlay
   UIs) - OPEN.
 - A durable persistence regression test (incognito + restart + new tab) - OPEN.

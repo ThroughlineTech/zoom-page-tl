@@ -5,39 +5,48 @@ const PRESETS = [0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0];
 let currentTab = null;
 let currentHost = "";
 let currentFactor = 1.0;
-let currentDisabled = false;
+let currentExcluded = false; // x:<host> - never zoom this site
+let currentPaused = false; // p:<host> - zoom suspended for now (resume later)
 let currentAuto = false; // auto-fit mode: re-fits on load (see content.js)
 
 const $host = document.getElementById("host");
 const $pct = document.getElementById("pct");
 const $presets = document.getElementById("presets");
-const $disable = document.getElementById("disable");
+const $pause = document.getElementById("pause");
+const $exclude = document.getElementById("exclude");
 
 function pctText(f) {
   return Math.round(f * 100) + "%";
 }
 
 function render() {
+  // Suppressed = excluded or paused: either way the page is held at 100% and the
+  // zoom controls are inert. Excluded is the stronger state (a never-zoom site
+  // has nothing to pause), so its checkbox disables the pause one.
+  const suppressed = currentExcluded || currentPaused;
   $host.textContent = currentHost || "(no site)";
-  $pct.textContent = currentDisabled ? "Off" : pctText(currentFactor);
-  document.body.classList.toggle("off", currentDisabled);
-  $disable.checked = currentDisabled;
-  // Mark the matching preset, and make the zoom controls inert while paused.
+  $pct.textContent = currentExcluded
+    ? "Off"
+    : currentPaused
+    ? "Paused"
+    : pctText(currentFactor);
+  document.body.classList.toggle("off", suppressed);
+  $pause.checked = currentPaused;
+  $pause.disabled = currentExcluded;
+  $exclude.checked = currentExcluded;
+  // Mark the matching preset, and make the zoom controls inert while suppressed.
   [...$presets.children].forEach((btn) => {
     const v = parseFloat(btn.dataset.v);
-    btn.classList.toggle(
-      "on",
-      !currentDisabled && Math.abs(v - currentFactor) < 1e-6
-    );
-    btn.disabled = currentDisabled;
+    btn.classList.toggle("on", !suppressed && Math.abs(v - currentFactor) < 1e-6);
+    btn.disabled = suppressed;
   });
   for (const id of ["in", "out", "fit", "reset"]) {
-    document.getElementById(id).disabled = currentDisabled;
+    document.getElementById(id).disabled = suppressed;
   }
   // Highlight "Fit width" while auto-fit mode is on (it re-fits on each load).
   document
     .getElementById("fit")
-    .classList.toggle("on", currentAuto && !currentDisabled);
+    .classList.toggle("on", currentAuto && !suppressed);
 }
 
 async function persist() {
@@ -82,17 +91,38 @@ document.getElementById("reset").addEventListener("click", () =>
   setFactor(1.0)
 );
 
-// Disable (pause) zoom on this site. Writes x:<host>; the content script
-// un-zooms/re-zooms live and the service worker updates the badge.
-$disable.addEventListener("change", async () => {
+// Pause (temporary) zoom on this site. Writes p:<host>; content.js suspends the
+// zoom live and the service worker hands native zoom back. The stored level is
+// kept, so resuming restores it.
+$pause.addEventListener("change", async () => {
   if (!currentHost) {
-    $disable.checked = false;
+    $pause.checked = false;
     return;
   }
-  currentDisabled = $disable.checked;
+  currentPaused = $pause.checked;
+  const pKey = "p:" + currentHost;
+  if (currentPaused) {
+    await chrome.storage.local.set({ [pKey]: true });
+  } else {
+    await chrome.storage.local.remove(pKey);
+  }
+  render();
+});
+
+// Exclude (never) zoom on this site. Writes x:<host>. Excluding supersedes a
+// pause, so it clears p:<host> too; including (uncheck) just removes x:.
+$exclude.addEventListener("change", async () => {
+  if (!currentHost) {
+    $exclude.checked = false;
+    return;
+  }
+  currentExcluded = $exclude.checked;
   const xKey = "x:" + currentHost;
-  if (currentDisabled) {
+  const pKey = "p:" + currentHost;
+  if (currentExcluded) {
+    currentPaused = false;
     await chrome.storage.local.set({ [xKey]: true });
+    await chrome.storage.local.remove(pKey);
   } else {
     await chrome.storage.local.remove(xKey);
   }
@@ -158,10 +188,12 @@ document.getElementById("options").addEventListener("click", () => {
     const res = await chrome.storage.local.get([
       hostKey(currentHost),
       "x:" + currentHost,
+      "p:" + currentHost,
       "af:" + currentHost,
     ]);
     currentFactor = res[hostKey(currentHost)] || 1.0;
-    currentDisabled = !!res["x:" + currentHost];
+    currentExcluded = !!res["x:" + currentHost];
+    currentPaused = !!res["p:" + currentHost];
     currentAuto = !!res["af:" + currentHost];
   }
   render();

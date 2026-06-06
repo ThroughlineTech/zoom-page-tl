@@ -1,8 +1,9 @@
-// Per-site disable (pause). The popup writes x:<host> = true; content.js then
-// leaves the page at its natural 100% (ignoring any stored factor and the global
-// default), the keyboard zoom is inert, and the badge shows "off". We exercise
-// the behavior content.js honors (driving storage the way the popup toggle does);
-// the toggle widget itself is a manual checklist item.
+// Per-site exclude (x:<host> = "never zoom this site"). The popup/options write
+// x:<host>; content.js then leaves the page at its natural 100% (ignoring any
+// stored factor and the global default), the keyboard zoom is inert, and the
+// badge shows "off". We exercise the behavior content.js honors (driving storage
+// the way the UI does); the toggle widgets themselves are manual checklist items.
+// Pause (p:) shares this page behavior and is covered in pause.spec.js.
 
 const { test, expect } = require("./fixtures");
 
@@ -28,7 +29,7 @@ test.beforeEach(async ({ serviceWorker }) => {
   await serviceWorker.evaluate(() => chrome.storage.local.clear());
 });
 
-test("a disabled site is not zoomed even with a stored factor", async ({
+test("an excluded site is not zoomed even with a stored factor", async ({
   page,
   serviceWorker,
 }) => {
@@ -41,7 +42,7 @@ test("a disabled site is not zoomed even with a stored factor", async ({
   expect(Math.round(await markerWidth(page))).toBe(100);
 });
 
-test("a disabled site ignores the global default too", async ({
+test("an excluded site ignores the global default too", async ({
   page,
   serviceWorker,
 }) => {
@@ -54,7 +55,7 @@ test("a disabled site ignores the global default too", async ({
   expect(Math.round(await markerWidth(page))).toBe(100);
 });
 
-test("toggling disable un-zooms live, and re-enabling restores the factor", async ({
+test("toggling exclude un-zooms live, and including restores the factor", async ({
   page,
   serviceWorker,
 }) => {
@@ -64,7 +65,7 @@ test("toggling disable un-zooms live, and re-enabling restores the factor", asyn
   await page.goto("/");
   expect(Math.round(await markerWidth(page))).toBe(150);
 
-  // Pause: page drops to 100% without a reload (the stored 1.5 is preserved).
+  // Exclude: page drops to 100% without a reload (the stored 1.5 is preserved).
   await serviceWorker.evaluate(() =>
     chrome.storage.local.set({ "x:localhost": true })
   );
@@ -73,7 +74,7 @@ test("toggling disable un-zooms live, and re-enabling restores the factor", asyn
     await serviceWorker.evaluate(() => chrome.storage.local.get("z:localhost"))
   ).toEqual({ "z:localhost": 1.5 });
 
-  // Resume: the preserved factor re-applies live.
+  // Include: the preserved factor re-applies live.
   await serviceWorker.evaluate(() =>
     chrome.storage.local.remove("x:localhost")
   );
@@ -81,7 +82,7 @@ test("toggling disable un-zooms live, and re-enabling restores the factor", asyn
   expect(Math.round(await markerWidth(page))).toBe(150);
 });
 
-test("on a disabled site, Ctrl +/- do not drive the extension", async ({
+test("on an excluded site, Ctrl +/- do not drive the extension", async ({
   page,
   serviceWorker,
 }) => {
@@ -90,7 +91,7 @@ test("on a disabled site, Ctrl +/- do not drive the extension", async ({
   );
   await page.goto("/");
   await page.locator("body").click();
-  await expect.poll(() => htmlZoom(page)).toBe(""); // disabled -> no CSS zoom
+  await expect.poll(() => htmlZoom(page)).toBe(""); // excluded -> no CSS zoom
   expect(Math.round(await markerWidth(page))).toBe(100);
 
   await page.keyboard.press("Control+Equal");
@@ -105,7 +106,7 @@ test("on a disabled site, Ctrl +/- do not drive the extension", async ({
   ).toEqual({ "z:localhost": 1.5 });
 });
 
-test("a disabled site hands browser zoom back (mode automatic)", async ({
+test("an excluded site hands browser zoom back (mode automatic)", async ({
   page,
   serviceWorker,
 }) => {
@@ -116,7 +117,7 @@ test("a disabled site hands browser zoom back (mode automatic)", async ({
   const tabId = await localhostTabId(serviceWorker);
   expect(tabId).not.toBeNull();
 
-  // Inverse of the core "browser zoom stays disabled" guarantee: on a paused
+  // Inverse of the core "browser zoom stays disabled" guarantee: on an excluded
   // site native zoom is restored, so Ctrl +/- and the browser bubble work.
   await expect
     .poll(() =>
@@ -128,7 +129,7 @@ test("a disabled site hands browser zoom back (mode automatic)", async ({
     .toBe("automatic");
 });
 
-test("toggling disable flips the browser-zoom mode live", async ({
+test("toggling exclude flips the browser-zoom mode live", async ({
   page,
   serviceWorker,
 }) => {
@@ -153,7 +154,7 @@ test("toggling disable flips the browser-zoom mode live", async ({
   await expect.poll(mode).toBe("disabled");
 });
 
-test("on a disabled site, Ctrl+= is left un-prevented for the browser", async ({
+test("on an excluded site, Ctrl+= is left un-prevented for the browser", async ({
   page,
   serviceWorker,
 }) => {
@@ -170,23 +171,23 @@ test("on a disabled site, Ctrl+= is left un-prevented for the browser", async ({
     });
   });
 
-  // Enabled: the content script intercepts (preventDefault => true).
+  // Included: the content script intercepts (preventDefault => true).
   await page.keyboard.press("Control+Equal");
   await expect.poll(() => page.evaluate(() => window.__dp)).toBe(true);
 
-  // Disable and wait for the content script to observe it (page un-zooms).
+  // Exclude and wait for the content script to observe it (page un-zooms).
   await serviceWorker.evaluate(() =>
     chrome.storage.local.set({ "x:localhost": true })
   );
   await expect.poll(() => htmlZoom(page)).toBe("");
 
-  // Paused: the key is left un-prevented, so the browser handles it natively.
+  // Excluded: the key is left un-prevented, so the browser handles it natively.
   await page.evaluate(() => (window.__dp = null));
   await page.keyboard.press("Control+Equal");
   await expect.poll(() => page.evaluate(() => window.__dp)).toBe(false);
 });
 
-test("the badge shows 'off' for a disabled site", async ({
+test("the badge shows 'off' for an excluded site", async ({
   page,
   serviceWorker,
 }) => {

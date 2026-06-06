@@ -138,7 +138,7 @@
     cursor: pointer;
   }
   .toggle input { margin: 0; cursor: pointer; }
-  /* Paused on this site: dim the (now inert) zoom controls. */
+  /* Suppressed (excluded or paused): dim the (now inert) zoom controls. */
   body.off .stepper,
   body.off .presets,
   body.off .actions { opacity: 0.4; }
@@ -165,8 +165,11 @@
   <div class="note" id="note"></div>
 
   <div class="footer">
-    <label class="toggle" title="Pause zooming on this site">
-      <input type="checkbox" id="disable" />Disable here
+    <label class="toggle" title="Pause zooming on this site for now (resume later)">
+      <input type="checkbox" id="pause" />Pause
+    </label>
+    <label class="toggle" title="Never zoom this site">
+      <input type="checkbox" id="exclude" />Exclude
     </label>
     <a id="options">Options</a>
   </div>

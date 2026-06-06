@@ -1,6 +1,6 @@
-// Options page: global default zoom, manage-list UI, and JSON import/export.
-// The pure storage ops are tested via window.ZP (deterministic, no file dialog);
-// the UI is tested by driving the real DOM.
+// Options page: global default zoom, the Active/Excluded manage-list UI, and JSON
+// import/export. The pure storage ops are tested via window.ZP (deterministic, no
+// file dialog); the UI is tested by driving the real DOM.
 
 const { test, expect } = require("./fixtures");
 
@@ -19,7 +19,7 @@ test.beforeEach(async ({ serviceWorker }) => {
   await serviceWorker.evaluate(() => chrome.storage.local.clear());
 });
 
-test("export then import round-trips per-site data and default", async ({
+test("export then import round-trips levels, default, and excludes", async ({
   page,
   extensionId,
   serviceWorker,
@@ -29,6 +29,7 @@ test("export then import round-trips per-site data and default", async ({
     await window.ZP.setSite("a.example.com", 1.5);
     await window.ZP.setSite("b.example.com", 0.75);
     await window.ZP.setDefault(1.25);
+    await window.ZP.setExcluded("c.example.com", true);
   });
 
   const dump = await page.evaluate(() => window.ZP.exportData());
@@ -36,6 +37,7 @@ test("export then import round-trips per-site data and default", async ({
     version: 1,
     defaultZoom: 1.25,
     sites: { "a.example.com": 1.5, "b.example.com": 0.75 },
+    excluded: ["c.example.com"],
   });
 
   await serviceWorker.evaluate(() => chrome.storage.local.clear());
@@ -51,6 +53,60 @@ test("export then import round-trips per-site data and default", async ({
   expect(stored["z:a.example.com"]).toBe(1.5);
   expect(stored["z:b.example.com"]).toBe(0.75);
   expect(stored["cfg:defaultZoom"]).toBe(1.25);
+  expect(stored["x:c.example.com"]).toBe(true);
+});
+
+test("export carries excluded sites (incl. ones that also have a level)", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await openOptions(page, extensionId);
+  await page.evaluate(async () => {
+    await window.ZP.setSite("keep.example.com", 1.4); // active, leveled
+    await window.ZP.setSite("both.example.com", 1.2); // leveled...
+    await window.ZP.setExcluded("both.example.com", true); // ...and excluded
+    await window.ZP.setExcluded("never.example.com", true); // excluded-only
+  });
+
+  const dump = await page.evaluate(() => window.ZP.exportData());
+  expect(dump.sites).toEqual({
+    "keep.example.com": 1.4,
+    "both.example.com": 1.2,
+  });
+  expect(dump.excluded).toEqual(["both.example.com", "never.example.com"]);
+
+  await serviceWorker.evaluate(() => chrome.storage.local.clear());
+  await page.evaluate((d) => window.ZP.importData(d, { replace: true }), dump);
+  const stored = await serviceWorker.evaluate(() =>
+    chrome.storage.local.get(null)
+  );
+  expect(stored["z:keep.example.com"]).toBe(1.4);
+  expect(stored["z:both.example.com"]).toBe(1.2);
+  expect(stored["x:both.example.com"]).toBe(true);
+  expect(stored["x:never.example.com"]).toBe(true);
+});
+
+test("replace import clears existing excludes", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({ "x:old.example.com": true })
+  );
+  await openOptions(page, extensionId);
+  await page.evaluate(() =>
+    window.ZP.importData(
+      { version: 1, sites: {}, excluded: ["new.example.com"] },
+      { replace: true }
+    )
+  );
+  const stored = await serviceWorker.evaluate(() =>
+    chrome.storage.local.get(null)
+  );
+  expect(stored["x:old.example.com"]).toBeUndefined();
+  expect(stored["x:new.example.com"]).toBe(true);
 });
 
 test("import merges by default and replaces when asked", async ({
@@ -187,7 +243,29 @@ test("global default drives the command stepping base and the badge", async ({
   expect(await serviceWorker.evaluate(() => getFactor("localhost"))).toBe(2);
 });
 
-test("options UI lists saved sites, edits a level, and removes a site", async ({
+test("listSites reports level, excluded, and paused state", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({
+      "z:a.example.com": 1.5,
+      "x:b.example.com": true,
+      "z:c.example.com": 1.2,
+      "p:c.example.com": true,
+    })
+  );
+  await openOptions(page, extensionId);
+  const sites = await page.evaluate(() => window.ZP.listSites());
+  expect(sites).toEqual([
+    { host: "a.example.com", factor: 1.5, excluded: false, paused: false },
+    { host: "b.example.com", factor: null, excluded: true, paused: false },
+    { host: "c.example.com", factor: 1.2, excluded: false, paused: true },
+  ]);
+});
+
+test("options UI lists active sites, edits a level, and removes a site", async ({
   page,
   extensionId,
   serviceWorker,
@@ -200,13 +278,13 @@ test("options UI lists saved sites, edits a level, and removes a site", async ({
   );
   await openOptions(page, extensionId);
 
-  await expect(page.locator("#sites tr")).toHaveCount(2);
+  await expect(page.locator("#active tr")).toHaveCount(2);
   await expect(
-    page.locator("#sites tr").first().locator("td.host")
+    page.locator("#active tr").first().locator("td.host")
   ).toHaveText("alpha.example.com");
 
   const alphaInput = page
-    .locator("#sites tr", { hasText: "alpha.example.com" })
+    .locator("#active tr", { hasText: "alpha.example.com" })
     .locator("input");
   await alphaInput.fill("175");
   await alphaInput.blur();
@@ -221,103 +299,123 @@ test("options UI lists saved sites, edits a level, and removes a site", async ({
     .toBe(1.75);
 
   await page
-    .locator("#sites tr", { hasText: "beta.example.com" })
+    .locator("#active tr", { hasText: "beta.example.com" })
     .locator("button.remove")
     .click();
-  await expect(page.locator("#sites tr")).toHaveCount(1);
+  await expect(page.locator("#active tr")).toHaveCount(1);
   const stored = await serviceWorker.evaluate(() =>
     chrome.storage.local.get(null)
   );
   expect(stored["z:beta.example.com"]).toBeUndefined();
 });
 
-test("listSites includes paused-only sites and marks pause state", async ({
+test("options UI shows an excluded-only site in the Excluded list and includes it", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({ "x:never.example.com": true })
+  );
+  await openOptions(page, extensionId);
+
+  const row = page.locator("#excluded tr", { hasText: "never.example.com" });
+  await expect(row).toHaveCount(1);
+  await expect(row.locator("input")).toBeDisabled();
+  await expect(page.locator("#active tr")).toHaveCount(0);
+
+  await row.locator("button", { hasText: "Include" }).click();
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(() =>
+        chrome.storage.local
+          .get("x:never.example.com")
+          .then((r) => r["x:never.example.com"])
+      )
+    )
+    .toBeUndefined();
+  // No level and no exclude -> no longer a customized site.
+  await expect(page.locator("#excluded tr")).toHaveCount(0);
+});
+
+test("options UI excludes an active site: moves to Excluded, keeps level, clears pause", async ({
   page,
   extensionId,
   serviceWorker,
 }) => {
   await serviceWorker.evaluate(() =>
     chrome.storage.local.set({
-      "z:a.example.com": 1.5,
-      "x:b.example.com": true,
-      "z:c.example.com": 1.2,
-      "x:c.example.com": true,
+      "z:news.example.com": 1.32,
+      "p:news.example.com": true,
     })
   );
   await openOptions(page, extensionId);
-  const sites = await page.evaluate(() => window.ZP.listSites());
-  expect(sites).toEqual([
-    { host: "a.example.com", factor: 1.5, paused: false },
-    { host: "b.example.com", factor: null, paused: true },
-    { host: "c.example.com", factor: 1.2, paused: true },
-  ]);
+
+  const activeRow = page.locator("#active tr", { hasText: "news.example.com" });
+  await expect(activeRow).toHaveCount(1);
+
+  await activeRow.locator("button", { hasText: "Exclude" }).click();
+
+  await expect(
+    page.locator("#excluded tr", { hasText: "news.example.com" })
+  ).toHaveCount(1);
+  await expect(page.locator("#active tr")).toHaveCount(0);
+
+  const stored = await serviceWorker.evaluate(() =>
+    chrome.storage.local.get(null)
+  );
+  expect(stored["x:news.example.com"]).toBe(true);
+  expect(stored["p:news.example.com"]).toBeUndefined(); // exclude supersedes pause
+  expect(stored["z:news.example.com"]).toBe(1.32); // level kept
 });
 
-test("options UI lists a paused-only site and resumes it", async ({
+test("options UI pauses an active site (stays Active, tagged) and resumes", async ({
   page,
   extensionId,
   serviceWorker,
 }) => {
   await serviceWorker.evaluate(() =>
-    chrome.storage.local.set({ "x:paused.example.com": true })
+    chrome.storage.local.set({ "z:blog.example.com": 1.5 })
   );
   await openOptions(page, extensionId);
 
-  const row = page.locator("#sites tr", { hasText: "paused.example.com" });
-  await expect(row).toHaveCount(1);
-  await expect(row.locator(".tag")).toHaveText("Paused");
-  await expect(row.locator("input")).toBeDisabled();
-
-  await row.locator("button.toggle").click(); // Resume
-  await expect
-    .poll(() =>
-      serviceWorker.evaluate(() =>
-        chrome.storage.local
-          .get("x:paused.example.com")
-          .then((r) => r["x:paused.example.com"])
-      )
-    )
-    .toBeUndefined();
-  // With no level and no pause key, the site is no longer customized.
-  await expect(page.locator("#sites tr")).toHaveCount(0);
-});
-
-test("options UI pauses an active site and keeps its level", async ({
-  page,
-  extensionId,
-  serviceWorker,
-}) => {
-  await serviceWorker.evaluate(() =>
-    chrome.storage.local.set({ "z:active.example.com": 1.5 })
-  );
-  await openOptions(page, extensionId);
-
-  const row = page.locator("#sites tr", { hasText: "active.example.com" });
+  const row = page.locator("#active tr", { hasText: "blog.example.com" });
   await expect(row.locator("input")).not.toBeDisabled();
 
-  await row.locator("button.toggle").click(); // Pause
+  await row.locator("button", { hasText: "Pause" }).click();
   await expect
     .poll(() =>
       serviceWorker.evaluate(() =>
         chrome.storage.local
-          .get("x:active.example.com")
-          .then((r) => r["x:active.example.com"])
+          .get("p:blog.example.com")
+          .then((r) => r["p:blog.example.com"])
       )
     )
     .toBe(true);
+  // Still Active (not moved to Excluded), now tagged and disabled.
+  await expect(page.locator("#active tr", { hasText: "blog.example.com" })).toHaveCount(
+    1
+  );
+  await expect(page.locator("#excluded tr")).toHaveCount(0);
   await expect(row.locator(".tag")).toHaveText("Paused");
   await expect(row.locator("input")).toBeDisabled();
-  // The saved level survives a pause so resuming restores it.
-  expect(
-    await serviceWorker.evaluate(() =>
-      chrome.storage.local
-        .get("z:active.example.com")
-        .then((r) => r["z:active.example.com"])
+
+  await row.locator("button", { hasText: "Resume" }).click();
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(() =>
+        chrome.storage.local
+          .get("p:blog.example.com")
+          .then((r) => r["p:blog.example.com"])
+      )
     )
-  ).toBe(1.5);
+    .toBeUndefined();
+  await expect(
+    page.locator("#active tr", { hasText: "blog.example.com" }).locator("input")
+  ).not.toBeDisabled();
 });
 
-test("removeSite clears the level, pause, and auto-fit keys together", async ({
+test("removeSite clears the level, exclude, pause, and auto-fit keys together", async ({
   page,
   extensionId,
   serviceWorker,
@@ -326,6 +424,7 @@ test("removeSite clears the level, pause, and auto-fit keys together", async ({
     chrome.storage.local.set({
       "z:gone.example.com": 1.5,
       "x:gone.example.com": true,
+      "p:gone.example.com": true,
       "af:gone.example.com": true,
     })
   );
@@ -337,6 +436,7 @@ test("removeSite clears the level, pause, and auto-fit keys together", async ({
   );
   expect(stored["z:gone.example.com"]).toBeUndefined();
   expect(stored["x:gone.example.com"]).toBeUndefined();
+  expect(stored["p:gone.example.com"]).toBeUndefined();
   expect(stored["af:gone.example.com"]).toBeUndefined();
 });
 

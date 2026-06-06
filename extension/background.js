@@ -2,8 +2,9 @@
 // Two jobs:
 //   1) Suppress Chrome's native zoom bubble by disabling browser zoom on every
 //      tab/navigation (setZoomSettings resets to default on each navigation, so
-//      it must be reapplied) - EXCEPT on paused sites (x:<host>), where browser
-//      zoom is handed back to Chrome ("automatic") so native Ctrl +/- work.
+//      it must be reapplied) - EXCEPT on suppressed sites (excluded x:<host> or
+//      paused p:<host>), where browser zoom is handed back to Chrome
+//      ("automatic") so native Ctrl +/- work.
 //   2) Keep the toolbar badge showing the current site's zoom %, and handle the
 //      keyboard commands.
 
@@ -59,27 +60,29 @@ async function setFactor(host, factor) {
   }
 }
 
-async function isDisabled(host) {
+// Excluded (x:, never zoom) or paused (p:, suspended for now): either way the
+// extension steps aside - hold the page at 100% and hand browser zoom back.
+async function isSuppressed(host) {
   if (!host) return false;
-  const res = await chrome.storage.local.get("x:" + host);
-  return !!res["x:" + host];
+  const res = await chrome.storage.local.get(["x:" + host, "p:" + host]);
+  return !!res["x:" + host] || !!res["p:" + host];
 }
 
 async function applyZoomMode(tabId, host) {
   // Normal sites: pin browser zoom to "disabled", which reverts the tab to 100%
   // silently and makes Chrome ignore all zoom changes => the native bubble can
-  // never appear. Paused sites: hand zoom back to the browser ("automatic"), so
-  // native Ctrl +/- work as usual (the bubble then appearing is acceptable - the
-  // user explicitly opted this site out of the extension).
-  const mode = (await isDisabled(host)) ? "automatic" : "disabled";
+  // never appear. Excluded/paused sites: hand zoom back to the browser
+  // ("automatic"), so native Ctrl +/- work as usual (the bubble then appearing
+  // is acceptable - the user opted this site out, for now or for good).
+  const mode = (await isSuppressed(host)) ? "automatic" : "disabled";
   chrome.tabs.setZoomSettings(tabId, { mode }).catch(() => {
     /* chrome://, web store, etc. will reject; ignore */
   });
 }
 
 async function refreshBadge(tabId, host) {
-  // Paused on this site: a distinct gray "off" badge instead of a percent.
-  if (await isDisabled(host)) {
+  // Excluded or paused on this site: a distinct gray "off" badge, not a percent.
+  if (await isSuppressed(host)) {
     chrome.action.setBadgeText({ tabId, text: "off" });
     chrome.action.setBadgeBackgroundColor({ tabId, color: "#6b7280" });
     return;
@@ -113,9 +116,9 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 });
 
 // Keep the active tab in sync when the zoom data changes from anywhere: the
-// content-script Ctrl +/- keys, the popup (including its disable toggle), or the
-// options page. Tab events above cover navigation and activation; this covers
-// in-place edits, so pausing/resuming flips the zoom mode and badge live.
+// content-script Ctrl +/- keys, the popup (including its pause/exclude toggles),
+// or the options page. Tab events above cover navigation and activation; this
+// covers in-place edits, so excluding/pausing flips the zoom mode and badge live.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local") syncActiveTab();
 });
@@ -138,7 +141,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (!tab) return;
   const host = hostOf(tab.url);
   if (!host) return;
-  if (await isDisabled(host)) return; // paused on this site; commands do nothing
+  if (await isSuppressed(host)) return; // excluded/paused; commands do nothing
 
   // AutoFit needs a live measurement, so it runs in the content script. The
   // content script writes storage itself; we just refresh the badge after.

@@ -86,6 +86,16 @@
     vertical-align: middle;
   }
   .empty { color: var(--muted); font-size: 13px; padding: 8px; }
+  h3.grp {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    color: var(--muted);
+    margin: 16px 0 4px;
+  }
+  .scroll { max-height: 320px; overflow-y: auto; }
+  tr.excluded td.host { color: var(--muted); }
   .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .status { color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 8px; }
 </style>
@@ -112,16 +122,28 @@
   <section>
     <h2>Saved sites</h2>
     <p class="hint">
-      Edit a level, pause a site, or remove it. Paused sites (set from the popup's
-      "Disable here") show here too. Setting 100% clears a site's level.
+      Active sites are zoomed. Pause one to suspend it for now, or Exclude it to
+      never zoom it (excluded sites move to the list below). Setting 100% clears a
+      site's level.
     </p>
-    <table>
-      <thead>
-        <tr><th>Site</th><th>Zoom</th><th></th></tr>
-      </thead>
-      <tbody id="sites"></tbody>
-    </table>
-    <div class="empty" id="empty" hidden>No customized sites yet.</div>
+
+    <h3 class="grp">Active</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Site</th><th>Zoom</th><th></th></tr></thead>
+        <tbody id="active"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="activeEmpty" hidden>No active sites.</div>
+
+    <h3 class="grp">Excluded</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Site</th><th>Zoom</th><th></th></tr></thead>
+        <tbody id="excluded"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="excludedEmpty" hidden>No excluded sites.</div>
   </section>
 
   <section>

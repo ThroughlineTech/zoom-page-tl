@@ -27,16 +27,18 @@ zoom only. See `HANDOFF.md` for the full design rationale and the engineering br
   keys keep working - they drive this extension's per-site zoom, with no zoom bubble).
   `Alt+Shift+Up / Down / 0` do the same and are rebindable at
   `chrome://extensions/shortcuts`; AutoFit has a command there with no default key.
-- "Disable here" (popup footer) pauses zooming on the current site: the extension steps
-  aside and hands zoom back to Chrome, so the normal native Ctrl +/- (and its zoom
-  bubble) work again. Your saved level is kept for when you re-enable. Use it for sites
-  that misbehave under zoom. The badge shows "off" while paused.
+- "Pause" and "Exclude" (popup footer) both step the extension aside on the current
+  site: it holds the page at 100% and hands zoom back to Chrome, so the normal native
+  Ctrl +/- (and its zoom bubble) work again, and the badge shows "off". Pause is
+  temporary (suspend for now - say a layout update broke - then resume later); Exclude
+  means never zoom this site. Your saved level is kept either way. Use them for sites
+  that misbehave under zoom.
 - The toolbar badge shows the current site's zoom percent.
 - "Options" (popup footer, or the extension's options page) lets you set a global
-  default zoom for new sites, manage every saved site - edit its level, pause/resume it,
-  or remove it - and import/export your levels as JSON. Sites you paused with "Disable
-  here" show up here too (tagged "Paused"), so you can resume them without revisiting the
-  page.
+  default zoom for new sites and manage every saved site in two lists: Active (edit its
+  level, pause/resume it, or exclude it) and Excluded (include it again, or remove it).
+  Export/import your levels and exclude list as JSON. Sites you paused or excluded from
+  the popup show up here too, so you can manage them without revisiting the page.
 
 ## Layout
 
