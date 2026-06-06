@@ -157,6 +157,14 @@ When the author pastes a report ("X is broken", a URL, a picture):
   author will see it flash. That is expected (it is the agent reproducing the page).
 - Env overrides: `ZP_DEV_BROWSER` (path to a different Chromium binary) and
   `ZP_DEV_PORT` (CDP port).
+- Load other extensions alongside (to test interactions, e.g. an ad blocker) with
+  `ZP_DEV_EXTRA_EXTENSIONS` - one or more unpacked-extension paths separated by `;`
+  or `,`. They are added to both `--load-extension` and `--disable-extensions-except`.
+  Example (uBlock Origin): `ZP_DEV_EXTRA_EXTENSIONS='C:\path\to\uBlock0.chromium' npm run dev`.
+  This is how the dev window confirmed uBlock + Zoom Page TL coexist (uBlock removes
+  the ads, our AutoFit then fits the cleaner layout). The author's standalone Chromium
+  still runs MV2 extensions, so uBlock 1.71 (MV2) loads; Playwright's bundled Chromium
+  may not. The auto-reload watcher only watches `extension/`, not the extra ones.
 - This is dev tooling only. It is not part of the shipped extension and not exercised
   by `npm test`; `npm run lint` ignores `scripts/` (it only checks manifest-referenced
   files under `extension/`).

@@ -35,9 +35,19 @@ function browserLaunchOptions() {
 // Flags shared by every launch. Only this extension is loaded, the dev profile
 // skips first-run noise, and a fixed CDP port lets dev-reload/dev-shot attach
 // from a separate process.
+// Extra unpacked extensions to load alongside this one, for testing interactions
+// (e.g. an ad blocker). Set ZP_DEV_EXTRA_EXTENSIONS to one or more paths,
+// separated by ; or , -- for example:
+//   ZP_DEV_EXTRA_EXTENSIONS='C:\path\to\uBlock0.chromium' npm run dev
+const EXTRA_EXTENSIONS = (process.env.ZP_DEV_EXTRA_EXTENSIONS || "")
+  .split(/[;,]/)
+  .map((s) => s.trim())
+  .filter(Boolean);
+const allExtensions = [EXT_DIR, ...EXTRA_EXTENSIONS].join(",");
+
 const launchArgs = [
-  `--disable-extensions-except=${EXT_DIR}`,
-  `--load-extension=${EXT_DIR}`,
+  `--disable-extensions-except=${allExtensions}`,
+  `--load-extension=${allExtensions}`,
   "--no-first-run",
   "--no-default-browser-check",
   `--remote-debugging-port=${CDP_PORT}`,
