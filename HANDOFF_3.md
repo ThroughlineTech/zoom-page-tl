@@ -128,9 +128,25 @@ When the author pastes a report ("X is broken", a URL, a picture):
 - One dev browser per session. A second `npm run dev` collides on the profile's
   singleton lock and on CDP port 9222. If `reload`/`shot` report "could not connect,"
   the dev browser is not running - start it.
+- DO NOT run `npm test` while the dev browser is running. The headed dev Chromium
+  (especially with a heavy page like cnn.com open) starves the test runner: the suite
+  slows from ~1 min to 3-5 min and timing-sensitive tests flake (a DIFFERENT one each
+  run - that scattered, non-deterministic pattern IS the tell-tale of contention, not a
+  real regression). Stop the dev browser first (`TaskStop`/Ctrl+C), run the suite clean,
+  then relaunch. A genuine regression fails the SAME test every time in isolation -
+  always re-run a suspect in isolation before believing it.
 - The dev browser is a background process. It survives across agent turns. It exits
   when the process is killed or Ctrl+C'd; closing the window also ends the run. The
   persistent profile means the next launch picks up where it left off.
+- Orphaned instance after a stop. Killing the launcher (TaskStop) does not always
+  cleanly close the Chromium it spawned - the browser can survive, holding the
+  `.dev-profile` lock and port 9222. The next `npm run dev` then fails with "Opening in
+  existing browser session" (Chromium forwarded to the orphan instead of launching a
+  controllable one). Recover by killing the orphan, then relaunching:
+  - close it over CDP:
+    `node -e "(async()=>{const{chromium}=require('@playwright/test');const b=await chromium.connectOverCDP('http://127.0.0.1:9222');const s=await b.newBrowserCDPSession();await s.send('Browser.close').catch(()=>{});await b.close().catch(()=>{})})()"`
+  - then clear any stale lock: `rm -f .dev-profile/SingletonLock .dev-profile/SingletonCookie .dev-profile/SingletonSocket`
+  - then `npm run dev` again.
 - `fs.watch({ recursive: true })` is supported on Windows and macOS (this repo's
   target), not Linux. If this ever needs to run on Linux, swap in a watcher that
   recurses manually, or rely on `npm run reload`.
