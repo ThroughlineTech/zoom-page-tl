@@ -32,11 +32,20 @@ function hostOf(url) {
   }
 }
 
+const DEFAULT_KEY = "cfg:defaultZoom"; // global default for un-customized sites
+
+// The factor a site actually renders at, resolved the same way content.js does:
+// its own z:<host> key if set, otherwise the global default, otherwise 100%.
+// Used for both the command stepping base (so "zoom in" steps up from what is on
+// screen, even when the default is not 100%) and the badge (so it shows the true
+// percent, not a blank that implies 100%).
 async function getFactor(host) {
   if (!host) return 1.0;
   const key = "z:" + host;
-  const res = await chrome.storage.local.get(key);
-  return res[key] || 1.0;
+  const res = await chrome.storage.local.get([key, DEFAULT_KEY]);
+  if (res[key] != null) return res[key];
+  if (res[DEFAULT_KEY] != null) return res[DEFAULT_KEY];
+  return 1.0;
 }
 
 async function setFactor(host, factor) {

@@ -143,6 +143,50 @@ test("global default applies to un-customized sites; a site key overrides it", a
     .toBe(125);
 });
 
+test("global default drives the command stepping base and the badge", async ({
+  page,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({ "cfg:defaultZoom": 1.25 })
+  );
+  await page.goto("/");
+
+  const tabId = await serviceWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    const t = tabs.find((x) => (x.url || "").includes("localhost"));
+    return t ? t.id : null;
+  });
+  expect(tabId).not.toBeNull();
+
+  // getFactor resolves the default for an un-customized site, so the Alt+Shift
+  // "zoom in" command steps UP from 1.25 (to 1.5), not from 1.0 (which would
+  // shrink a page already shown at 125%). chrome.commands cannot be dispatched
+  // from Playwright, so we assert the helper that determines the step base.
+  const base = await serviceWorker.evaluate(() => getFactor("localhost"));
+  expect(base).toBeCloseTo(1.25, 5);
+  expect(await serviceWorker.evaluate(() => stepFrom(1.25, 1))).toBeCloseTo(
+    1.5,
+    5
+  );
+
+  // The badge shows the resolved percent, not a blank that would imply 100%.
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(
+        (id) => chrome.action.getBadgeText({ tabId: id }),
+        tabId
+      )
+    )
+    .toBe("125");
+
+  // A site's own key still overrides the default.
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({ "z:localhost": 2 })
+  );
+  expect(await serviceWorker.evaluate(() => getFactor("localhost"))).toBe(2);
+});
+
 test("options UI lists saved sites, edits a level, and removes a site", async ({
   page,
   extensionId,

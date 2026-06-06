@@ -157,9 +157,12 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   the toolbar badge to the current site's percent. A `storage.onChanged` listener also
   refreshes the active tab's badge so in-place edits (the content-script Ctrl +/- keys,
   the popup, the options page) keep the badge in sync. Handles the keyboard commands by
-  stepping the active site's factor and writing it back to storage. Contains its own
-  copy of `ZOOM_STEPS` and `stepFrom` because service workers cannot easily share the
-  popup's plain script.
+  stepping the active site's factor and writing it back to storage. `getFactor` resolves
+  the factor the same way content.js does (`z:<host>` -> `cfg:defaultZoom` -> 1.0), so
+  both the command stepping base and the badge are default-aware: with a non-100% global
+  default, "zoom in" steps up from what is on screen and the badge shows that percent.
+  Contains its own copy of `ZOOM_STEPS` and `stepFrom` because service workers cannot
+  easily share the popup's plain script.
 
 - `extension/zoom.js`
   Shared helpers: `ZOOM_STEPS`, `hostKey`, `stepFrom`. Loaded as a plain script before
