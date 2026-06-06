@@ -5,6 +5,11 @@
 // CSS `zoom` in Chromium is a real layout zoom (reflows like browser zoom),
 // so there are no transform-scale scrollbar/overflow hacks and it runs at
 // native speed.
+//
+// This script owns the zoom: it applies the stored factor at document_start,
+// reflects live updates, handles the keyboard zoom and AutoFit, and re-asserts
+// the factor against sites that re-render and clobber it (see "Resilience"
+// below) - which is what keeps heavy/re-rendering sites (e.g. cnn.com) stable.
 
 (() => {
   const host = location.hostname;
@@ -12,20 +17,24 @@
   const key = "z:" + host;
   const DEFAULT_KEY = "cfg:defaultZoom"; // global default for un-customized sites
   const disabledKey = "x:" + host; // when set, zoom is paused for this host
+  const autoKey = "af:" + host; // when set, this site is in auto-fit mode
 
   const MIN = 0.25;
   const MAX = 5.0;
 
-  // Cached paused state, kept current by refresh() so the keydown handler can
-  // decide synchronously whether to intercept Ctrl +/- or let the browser have
-  // them (an async storage read would be too late to call preventDefault).
+  // Cached state, kept current by refresh(): `disabled` lets the keydown handler
+  // decide synchronously whether to let Ctrl +/- through; `autoMode` says the
+  // site re-fits on load/resize; `desired` is the factor we want on <html>, used
+  // to re-assert if the page clobbers it.
   let disabled = false;
+  let autoMode = false;
+  let desired = 1.0;
 
   function apply(factor) {
-    const f = factor && factor > 0 ? factor : 1.0;
+    desired = factor && factor > 0 ? factor : 1.0;
     // documentElement exists at document_start even before the body is parsed.
     if (document.documentElement) {
-      document.documentElement.style.zoom = f === 1 ? "" : String(f);
+      document.documentElement.style.zoom = desired === 1 ? "" : String(desired);
     }
   }
 
@@ -40,9 +49,10 @@
 
   function refresh() {
     try {
-      chrome.storage.local.get([key, DEFAULT_KEY, disabledKey], (res) => {
+      chrome.storage.local.get([key, DEFAULT_KEY, disabledKey, autoKey], (res) => {
         if (chrome.runtime.lastError) return;
         disabled = !!res[disabledKey];
+        autoMode = !disabled && !!res[autoKey];
         // Paused on this site: leave the page at its natural 100%, ignoring any
         // stored factor and the global default.
         apply(disabled ? 1.0 : resolve(res));
@@ -57,12 +67,19 @@
   refresh();
 
   // Live updates: popup, keyboard command, or options page writes storage;
-  // reflect instantly without a reload. React to this site's key and to the
-  // global default (which affects sites that have no key of their own).
+  // reflect instantly without a reload. React to this site's key, the global
+  // default, the paused flag, and the auto-fit flag.
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "local") return;
-      if (changes[key] || changes[DEFAULT_KEY] || changes[disabledKey]) refresh();
+      if (
+        changes[key] ||
+        changes[DEFAULT_KEY] ||
+        changes[disabledKey] ||
+        changes[autoKey]
+      ) {
+        refresh();
+      }
     });
   } catch (e) {
     /* ignore */
@@ -139,7 +156,7 @@
     void html.offsetWidth;
     const vw2 = html.clientWidth;
     const w2 = el.getBoundingClientRect().width;
-    html.style.zoom = ""; // restore; autofit() applies the final value
+    html.style.zoom = ""; // restore; apply() below sets the final value
     if (vw2 > 0 && w2 > 0) {
       const fill = w2 / vw2; // ~1 means it filled the width
       if (fill > 0.2 && Math.abs(fill - 1) > 0.03) factor = clampF(factor / fill);
@@ -155,7 +172,7 @@
     if (Math.abs(factor - 1.0) < 1e-6) {
       await chrome.storage.local.remove(key); // 100% => store nothing
     } else {
-      await chrome.storage.local.set({ [key]: factor });
+      await chrome.storage.local.set({ [key]: factor }); // af: untouched (stays auto)
     }
     return { factor, fits };
   }
@@ -187,6 +204,7 @@
         if (chrome.runtime.lastError) return;
         if (res[disabledKey]) return; // paused on this site; the keys do nothing
         const next = dir === 0 ? 1.0 : stepFrom(resolve(res), dir);
+        chrome.storage.local.remove(autoKey); // manual zoom -> leave auto-fit mode
         if (Math.abs(next - 1.0) < 1e-6) {
           chrome.storage.local.remove(key); // 100% => store nothing
         } else {
@@ -218,6 +236,72 @@
       },
       { capture: true }
     );
+  } catch (e) {
+    /* ignore */
+  }
+
+  // Resilience: some sites (e.g. cnn.com) re-render after load, clobbering the
+  // inline zoom or replacing <html>. Re-assert the desired factor when that
+  // happens. (The service worker's pre-paint stylesheet is the first line of
+  // defense; this is the second.) The apply() guard keeps this from fighting the
+  // AutoFit measurement (apply() updates `desired`, so re-assert sees a match).
+  function reassert() {
+    if (disabled) return;
+    const cur = document.documentElement.style.zoom;
+    const curN = cur ? parseFloat(cur) : 1.0;
+    if (Math.abs(curN - desired) > 0.005) apply(desired);
+  }
+  let styleObserver = null;
+  function watchStyle() {
+    try {
+      if (styleObserver) styleObserver.disconnect();
+      styleObserver = new MutationObserver(reassert);
+      styleObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["style"],
+      });
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  watchStyle();
+  try {
+    // Wholesale <html> replacement: re-apply and re-attach the style observer.
+    new MutationObserver(() => {
+      if (disabled) return;
+      apply(desired);
+      watchStyle();
+    }).observe(document, { childList: true });
+  } catch (e) {
+    /* ignore */
+  }
+
+  // Auto-fit re-fit: a site that reshapes while loading would fit wrong if
+  // measured too early, so auto-fit sites re-measure once the page has settled
+  // (after load) and on resize. Manual zooms are never re-fit. Debounced.
+  let refitTimer = null;
+  function scheduleRefit() {
+    if (refitTimer) clearTimeout(refitTimer);
+    // Read the flags when the timer fires, not now: on a fast-loading page `load`
+    // can beat the initial async storage read, so the cached autoMode may be
+    // stale here. Storage is authoritative at fire time.
+    refitTimer = setTimeout(() => {
+      try {
+        chrome.storage.local.get([disabledKey, autoKey], (res) => {
+          if (chrome.runtime.lastError) return;
+          if (res[autoKey] && !res[disabledKey]) autofit().catch(() => {});
+        });
+      } catch (e) {
+        /* ignore */
+      }
+    }, 400);
+  }
+  try {
+    window.addEventListener("load", () => {
+      refresh(); // re-assert after the load churn
+      scheduleRefit();
+    });
+    window.addEventListener("resize", scheduleRefit);
   } catch (e) {
     /* ignore */
   }

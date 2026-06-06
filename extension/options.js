@@ -48,6 +48,7 @@ async function setDefault(factor) {
 async function setSite(host, factor) {
   if (!host) return;
   const key = hostKey(host);
+  await chrome.storage.local.remove("af:" + host); // manual level -> leave auto-fit mode
   const f = clampFactor(factor);
   if (f == null || isOne(f)) {
     await chrome.storage.local.remove(key);

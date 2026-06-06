@@ -6,6 +6,7 @@ let currentTab = null;
 let currentHost = "";
 let currentFactor = 1.0;
 let currentDisabled = false;
+let currentAuto = false; // auto-fit mode: re-fits on load (see content.js)
 
 const $host = document.getElementById("host");
 const $pct = document.getElementById("pct");
@@ -33,10 +34,17 @@ function render() {
   for (const id of ["in", "out", "fit", "reset"]) {
     document.getElementById(id).disabled = currentDisabled;
   }
+  // Highlight "Fit width" while auto-fit mode is on (it re-fits on each load).
+  document
+    .getElementById("fit")
+    .classList.toggle("on", currentAuto && !currentDisabled);
 }
 
 async function persist() {
   const key = hostKey(currentHost);
+  // A manual zoom leaves auto-fit mode (the user picked a level; don't re-fit).
+  currentAuto = false;
+  await chrome.storage.local.remove("af:" + currentHost);
   if (Math.abs(currentFactor - 1.0) < 1e-6) {
     await chrome.storage.local.remove(key);
   } else {
@@ -104,7 +112,11 @@ function showNote(msg) {
 // AutoFit runs in the content script (it needs a live measurement). It writes
 // storage itself, so we just reflect the returned factor in the popup UI.
 document.getElementById("fit").addEventListener("click", async () => {
-  if (!currentTab) return;
+  if (!currentTab || !currentHost) return;
+  // Entering auto-fit mode: re-fits on each load (see content.js). Set the flag
+  // before measuring so the content script sees it.
+  currentAuto = true;
+  await chrome.storage.local.set({ ["af:" + currentHost]: true });
   try {
     const resp = await chrome.tabs.sendMessage(currentTab.id, {
       type: "autofit",
@@ -120,9 +132,12 @@ document.getElementById("fit").addEventListener("click", async () => {
       // Nothing to fit (already spans the window): say so, since the percent
       // not moving would otherwise look like a dead button.
       if (resp.fits) showNote("Already fits the width");
+    } else {
+      render();
     }
   } catch (e) {
     /* no content script on restricted pages */
+    render();
   }
 });
 
@@ -143,9 +158,11 @@ document.getElementById("options").addEventListener("click", () => {
     const res = await chrome.storage.local.get([
       hostKey(currentHost),
       "x:" + currentHost,
+      "af:" + currentHost,
     ]);
     currentFactor = res[hostKey(currentHost)] || 1.0;
     currentDisabled = !!res["x:" + currentHost];
+    currentAuto = !!res["af:" + currentHost];
   }
   render();
 })();

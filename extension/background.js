@@ -143,6 +143,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   // AutoFit needs a live measurement, so it runs in the content script. The
   // content script writes storage itself; we just refresh the badge after.
   if (command === "zoom-autofit") {
+    await chrome.storage.local.set({ ["af:" + host]: true }); // enter auto-fit mode
     try {
       await chrome.tabs.sendMessage(tab.id, { type: "autofit" });
     } catch (e) {
@@ -159,6 +160,7 @@ chrome.commands.onCommand.addListener(async (command) => {
     const cur = await getFactor(host);
     next = stepFrom(cur, command === "zoom-in" ? 1 : -1);
   }
+  await chrome.storage.local.remove("af:" + host); // manual zoom -> leave auto-fit mode
   await setFactor(host, next);
   refreshBadge(tab.id, host);
 });

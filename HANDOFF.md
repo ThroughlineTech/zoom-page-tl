@@ -151,8 +151,12 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   (`keydown`, capture, `preventDefault`) and steps the per-site CSS zoom via `stepFrom`
   (from `zoom.js`, loaded first). Honors `x:<hostname>`: when set, it holds the page at
   100% and leaves Ctrl +/- to the browser (it does not preventDefault them), so native
-  zoom works there. Wrapped in try/catch for pages where the extension context is
-  unavailable.
+  zoom works there. Re-asserts the desired factor if the page clobbers it - a
+  MutationObserver on the `<html>` style attribute plus a `document` childList observer
+  for wholesale `<html>` replacement (this is what keeps re-rendering sites like cnn.com
+  stable, and it is why a stored zoom survives the load churn). For `af:<host>` (auto-fit)
+  sites it re-runs AutoFit after `load` (debounced) and on resize. Wrapped in try/catch
+  for pages where the extension context is unavailable.
 
 - `extension/background.js`
   Service worker. On `tabs.onUpdated` (status loading) and `tabs.onActivated`, calls
@@ -160,7 +164,8 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   the toolbar badge to the current site's percent. A `storage.onChanged` listener also
   refreshes the active tab's badge so in-place edits (the content-script Ctrl +/- keys,
   the popup, the options page) keep the badge in sync. Handles the keyboard commands by
-  stepping the active site's factor and writing it back to storage. `getFactor` resolves
+  stepping the active site's factor and writing it back to storage (manual commands also
+  clear `af:<host>`, leaving auto-fit mode; `zoom-autofit` sets it). `getFactor` resolves
   the factor the same way content.js does (`z:<host>` -> `cfg:defaultZoom` -> 1.0), so
   both the command stepping base and the badge are default-aware: with a non-100% global
   default, "zoom in" steps up from what is on screen and the badge shows that percent.
@@ -181,8 +186,9 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   percent, a minus/plus stepper, a preset grid, a "Fit width" (AutoFit) button, a
   reset button, a "Disable here" toggle (footer) that pauses zoom for the site via
   `x:<host>`, and an "Options" footer link. Writes per-site factor to storage on
-  change; the content script reflects it live. While paused it shows "Off", dims the
-  controls, and disables them.
+  change; the content script reflects it live. "Fit width" enters auto-fit mode
+  (`af:<host>`) and stays highlighted while active; any manual zoom clears it. While
+  paused it shows "Off", dims the controls, and disables them.
 
 - `extension/options.html` / `extension/options.js`
   The options page (also reachable from the popup footer). Three sections: a global
@@ -232,6 +238,14 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   here" behavior for opted-out sites. The `z:<host>` factor is left intact, so removing
   `x:<host>` restores both the previous level and the `"disabled"` (no-bubble) mode live.
   Absence means enabled. Written by the popup "Disable here" toggle.
+- Auto-fit mode: `af:<hostname>` = `true` marks a site as auto-fit. `z:<host>` still
+  holds the applied factor (the cached last fit, so it applies on first paint), but the
+  site re-runs AutoFit once the page settles (on `load`, debounced, and on resize) and
+  updates `z:<host>` - so sites that reshape while loading (cnn.com) end up fit, not
+  measured-too-early. ANY manual zoom (popup stepper/preset/reset, Ctrl +/-/0, Alt+Shift
+  commands, an options-page level edit) clears `af:<host>`, so a level the user picks is
+  sticky and never re-fit. Set by the popup "Fit width" button and the `zoom-autofit`
+  command (which highlight while active).
 
 Keying is by `location.hostname`. This matches ZPWE's "treat domain and subdomains as
 separate sites" behavior: `x.com`, `www.x.com`, and `sub.x.com` are independent, and
@@ -282,7 +296,11 @@ remain open.
    (shrink, fill, breakout-ignore, clamp, fluid no-op) with `/wide`, `/narrow`, `/messy`
    fixtures. NOTE: real-world pages are messy (ads, breakouts, layouts that shift as
    content loads), so AutoFit is best-effort and the exact factor can vary by load; the
-   clamps and the "fits" fallback bound the worst case.
+   clamps and the "fits" fallback bound the worst case. AUTO-FIT MODE: "Fit width" is now
+   a persistent per-site mode (`af:<host>`), not a one-shot - the site re-fits after
+   `load` and on resize, so a site that reshapes while loading converges to the right fit
+   (cnn.com re-fits to ~1.47 once its slow `load` fires). A manual zoom clears the mode.
+   See `tests/autofit-mode.spec.js`.
 2. eTLD+1 keying option [M]. OPEN. Optionally collapse subdomains to the registrable
    domain. Requires a public-suffix list (bundle a static copy of the PSL; do not
    fetch at runtime, MV3 forbids remote code). Make it a toggle in the options page,
@@ -296,10 +314,19 @@ remain open.
 5. chrome.storage.sync option [S]. OPEN. Sync per-site levels across the user's
    signed-in Chrome instances. Watch the sync quota (small); keep local as the source
    of truth and mirror to sync, or make it a toggle.
-6. Zero-flash hardening [M], only if a flash is actually observed. OPEN. Options: cache
-   the factor in `chrome.storage.session` for instant reads, or have the service worker
-   `chrome.scripting.insertCSS` a built `:root{zoom:N}` string as a race-reducer. Do
-   not add this speculatively.
+6. Zero-flash hardening [M]. PARTLY ADDRESSED via the content-script re-assert (see the
+   content.js entry) - that is what actually fixed cnn.com, where the flash was the site
+   RE-RENDERING and dropping the inline zoom, not just a slow first read. The SW
+   pre-inject idea (insertCSS `:root{zoom:N}` at navigation) was TRIED AND REVERTED: a
+   left-behind stylesheet outlives a later reset to 100% (inline cleared -> the stale
+   `:root{zoom:1.5}` rule re-emerges -> page stuck at 150%), and removing it races the
+   page lifecycle; the inline (`executeScript`) variant instead fights the content script
+   and re-applies stale values after a live change. Two independent async actors driving
+   the same zoom + the "100% == cleared inline" convention = races. If revisited, do it
+   as a content.js-owned stylesheet (so one actor owns it) or change how 100% is
+   represented (explicit `zoom:1` to override, with behavioral tests). For now a stored
+   zoom applies at document_start and the re-assert keeps it stable, which is flash-free
+   on normal sites and stable on re-rendering ones.
 7. Tests [M]. DONE (harness). Playwright + Chromium suite loads the unpacked extension
    and asserts real behavior (CSS-zoom reflow via getBoundingClientRect, browser zoom
    disabled as the no-bubble proxy, live updates, reset, AutoFit, options,

@@ -90,11 +90,12 @@ test("on a disabled site, Ctrl +/- do not drive the extension", async ({
   );
   await page.goto("/");
   await page.locator("body").click();
+  await expect.poll(() => htmlZoom(page)).toBe(""); // disabled -> no CSS zoom
   expect(Math.round(await markerWidth(page))).toBe(100);
 
   await page.keyboard.press("Control+Equal");
   await page.keyboard.press("Control+Minus");
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(200);
 
   // The extension applies no CSS zoom and writes nothing; the keys are left to
   // the browser (see the next two tests for the mode and the un-prevented event).
