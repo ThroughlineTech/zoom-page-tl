@@ -7,6 +7,9 @@
   "scripts": {
     "lint": "node scripts/check.js",
     "test": "playwright test",
+    "dev": "node scripts/dev-browser.js",
+    "reload": "node scripts/dev-reload.js",
+    "shot": "node scripts/dev-shot.js",
     "start": "web-ext run -s extension -t chromium",
     "build": "web-ext build -s extension -a dist --overwrite-dest"
   },

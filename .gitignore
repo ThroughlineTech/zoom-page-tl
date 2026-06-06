@@ -6,6 +6,9 @@ playwright-report/
 *.zip
 .DS_Store
 Thumbs.db
+# Live dev browser (scripts/dev-browser.js): persistent profile + repro shots.
+.dev-profile/
+.dev-shots/
 # Original ZPWE source attached as read-only reference (GPLv2). Keep out of the
 # MIT-licensed history; drop it in locally for the agent.
 reference/
