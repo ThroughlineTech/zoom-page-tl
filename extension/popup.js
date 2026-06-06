@@ -91,6 +91,16 @@ $disable.addEventListener("change", async () => {
   render();
 });
 
+let noteTimer = null;
+function showNote(msg) {
+  const $note = document.getElementById("note");
+  $note.textContent = msg;
+  if (noteTimer) clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => {
+    $note.textContent = "";
+  }, 1800);
+}
+
 // AutoFit runs in the content script (it needs a live measurement). It writes
 // storage itself, so we just reflect the returned factor in the popup UI.
 document.getElementById("fit").addEventListener("click", async () => {
@@ -107,6 +117,9 @@ document.getElementById("fit").addEventListener("click", async () => {
           : String(Math.round(currentFactor * 100));
       chrome.action.setBadgeText({ tabId: currentTab.id, text });
       render();
+      // Nothing to fit (already spans the window): say so, since the percent
+      // not moving would otherwise look like a dead button.
+      if (resp.fits) showNote("Already fits the width");
     }
   } catch (e) {
     /* no content script on restricted pages */

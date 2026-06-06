@@ -18,7 +18,9 @@ zoom only. See `HANDOFF.md` for the full design rationale and the engineering br
 
 - Click the toolbar button to set the zoom level for the current site. The level is
   remembered per hostname.
-- "Fit width" in the popup AutoFits the zoom so the page width matches the window.
+- "Fit width" in the popup AutoFits the zoom to the window: it shrinks a page that is
+  too wide, or enlarges a site whose content sits in a narrow centered column (filling
+  the empty side margins). If the page already spans the window it says so.
 - Keyboard: `Ctrl +` zoom in, `Ctrl -` zoom out, `Ctrl 0` reset (the familiar zoom
   keys keep working - they drive this extension's per-site zoom, with no zoom bubble).
   `Alt+Shift+Up / Down / 0` do the same and are rebindable at

@@ -63,12 +63,41 @@ test("AutoFit on a page that already fits leaves it at 100%", async ({
 
   expect(resp.factor).toBeGreaterThan(0.98);
   expect(resp.factor).toBeLessThanOrEqual(1.0);
+  expect(resp.fits).toBe(true); // nothing to fit => "already fits" feedback
 
   // 100% is stored as the absence of a key.
   const stored = await serviceWorker.evaluate(() =>
     chrome.storage.local.get("z:localhost")
   );
   expect(stored["z:localhost"]).toBeUndefined();
+});
+
+test("AutoFit fills a centered column narrower than the window", async ({
+  page,
+  serviceWorker,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto("/narrow");
+
+  const tabId = await tabIdFor(serviceWorker, "localhost");
+  const resp = await runAutofit(serviceWorker, tabId);
+
+  // 600px column in a 1000px viewport => ~1.67 (enlarge to fill), not a no-op.
+  expect(resp.fits).toBe(false);
+  expect(resp.factor).toBeGreaterThan(1.5);
+  expect(resp.factor).toBeLessThan(1.8);
+
+  const stored = await serviceWorker.evaluate(() =>
+    chrome.storage.local.get("z:localhost")
+  );
+  expect(stored["z:localhost"]).toBeCloseTo(resp.factor, 5);
+
+  // The column now (about) fills the viewport width.
+  const fill = await page.evaluate(() => {
+    const c = document.getElementById("col").getBoundingClientRect().width;
+    return c / document.documentElement.clientWidth;
+  });
+  expect(fill).toBeGreaterThan(0.9);
 });
 
 test("AutoFit clamps an extremely wide page to the minimum factor", async ({

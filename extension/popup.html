@@ -102,6 +102,13 @@
     padding: 8px 0;
     font-size: 12px;
   }
+  .note {
+    min-height: 13px;
+    padding: 0 12px 6px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+  }
   .footer {
     display: flex;
     align-items: center;
@@ -148,6 +155,8 @@
     <button id="fit" title="Fit zoom to window width">Fit width</button>
     <button id="reset">Reset to 100%</button>
   </div>
+
+  <div class="note" id="note"></div>
 
   <div class="footer">
     <label class="toggle" title="Pause zooming on this site">

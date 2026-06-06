@@ -68,36 +68,86 @@
     /* ignore */
   }
 
-  // AutoFit-to-width. Measure the content at natural scale and pick the factor
-  // that makes the page width fit the viewport, clamped to the zoom range. This
-  // is the one operation that legitimately needs a post-layout measurement, so
-  // it runs on demand (popup button or keyboard command), never automatically.
+  function clampF(f) {
+    if (f < MIN) return MIN;
+    if (f > MAX) return MAX;
+    return Math.round(f * 100) / 100; // 0.01 precision => clean storage/badge
+  }
+
+  // The widest content block that still leaves a side margin: a centered/capped
+  // container, not a full-bleed background. This is the column AutoFit fills.
+  function widestContentElement(viewport) {
+    if (!document.body) return null;
+    let best = null;
+    let bestW = 0;
+    for (const el of document.body.querySelectorAll("*")) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 200 || r.height < 100) continue; // not a real content block
+      if (viewport - r.width < 20) continue; // full-bleed; nothing to fill
+      if (r.width > bestW) {
+        bestW = r.width;
+        best = el;
+      }
+    }
+    return best;
+  }
+
+  // AutoFit-to-width. Three regimes (see HANDOFF section 9): content wider than
+  // the viewport shrinks to fit; a centered content column narrower than the
+  // viewport enlarges to fill it; a fluid edge-to-edge page already fits at every
+  // zoom, so there is nothing to do. Returns { factor, fits } where fits=true
+  // means "no change worth making". Measuring under CSS zoom is unreliable
+  // (clientWidth is zoom-invariant while getBoundingClientRect rescales), so we
+  // compute once at scale 1 and, for the enlarge case, do a single re-check that
+  // tracks the SAME element (re-selecting the widest block would diverge).
   function computeAutofitFactor() {
     const html = document.documentElement;
-    // Measure at scale 1. Reading clientWidth/scrollWidth forces a synchronous
-    // reflow, so the numbers are correct; nothing paints between here and the
-    // apply() below, so the user never sees the un-zoomed frame.
-    html.style.zoom = "";
-    const viewport = html.clientWidth; // viewport width, minus any scrollbar
-    const content = html.scrollWidth; // full content width incl. overflow
-    if (!content || content <= 0) return 1;
-    let f = viewport / content;
-    if (f < MIN) f = MIN;
-    if (f > MAX) f = MAX;
-    return Math.round(f * 100) / 100; // 0.01 precision => clean storage/badge
+    html.style.zoom = ""; // measure at scale 1 (reading width forces a reflow)
+    void html.offsetWidth;
+    const viewport = html.clientWidth;
+    if (!viewport) return { factor: 1, fits: true };
+
+    // Regime 1: content overflows the viewport -> shrink to fit.
+    if (html.scrollWidth > viewport + 1) {
+      return { factor: clampF(viewport / html.scrollWidth), fits: false };
+    }
+
+    // Regime 2/3: no overflow. Find the centered content column to fill.
+    const el = widestContentElement(viewport);
+    if (!el) return { factor: 1, fits: true }; // fluid edge-to-edge
+
+    const contentW = el.getBoundingClientRect().width;
+    if (contentW <= 0 || viewport - contentW < 20) {
+      return { factor: 1, fits: true };
+    }
+    let factor = clampF(viewport / contentW);
+    if (factor <= 1.01) return { factor: 1, fits: true };
+
+    // Single re-check tracking the same element: does it actually fill at the
+    // chosen factor? If a breakpoint shifted its width, correct once.
+    html.style.zoom = String(factor);
+    void html.offsetWidth;
+    const vw2 = html.clientWidth;
+    const w2 = el.getBoundingClientRect().width;
+    html.style.zoom = ""; // restore; autofit() applies the final value
+    if (vw2 > 0 && w2 > 0) {
+      const fill = w2 / vw2; // ~1 means it filled the width
+      if (fill > 0.2 && Math.abs(fill - 1) > 0.03) factor = clampF(factor / fill);
+    }
+    return { factor, fits: false };
   }
 
   async function autofit() {
     const dis = await chrome.storage.local.get(disabledKey);
-    if (dis[disabledKey]) return 1.0; // paused on this site; do nothing
-    const f = computeAutofitFactor();
-    apply(f);
-    if (Math.abs(f - 1.0) < 1e-6) {
+    if (dis[disabledKey]) return { factor: 1, fits: true }; // paused; do nothing
+    const { factor, fits } = computeAutofitFactor();
+    apply(factor);
+    if (Math.abs(factor - 1.0) < 1e-6) {
       await chrome.storage.local.remove(key); // 100% => store nothing
     } else {
-      await chrome.storage.local.set({ [key]: f });
+      await chrome.storage.local.set({ [key]: factor });
     }
-    return f;
+    return { factor, fits };
   }
 
   // Message channel for the popup button and the keyboard command.
@@ -105,7 +155,7 @@
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg && msg.type === "autofit") {
         autofit()
-          .then((factor) => sendResponse({ factor }))
+          .then((res) => sendResponse(res))
           .catch((e) => sendResponse({ error: String(e) }));
         return true; // keep the channel open for the async response
       }

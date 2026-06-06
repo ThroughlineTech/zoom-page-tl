@@ -262,11 +262,21 @@ http vs https share a key (hostname ignores scheme). See Backlog for the eTLD+1 
 Each item lists effort as S/M/L. Items 1, 3, 4, and 7 are DONE (see notes); the rest
 remain open.
 
-1. AutoFit-to-width [M]. DONE. content.js measures `clientWidth / scrollWidth` at
-   scale 1 (forced sync reflow, no visible un-zoomed frame), clamps to [0.25, 5.0],
-   rounds to 0.01, applies and persists. Driven by the popup "Fit width" button and a
-   `zoom-autofit` command (defined with no default key; bind at
-   chrome://extensions/shortcuts). Covered by `tests/autofit.spec.js`.
+1. AutoFit-to-width [M]. DONE (revised). content.js measures at scale 1 (forced sync
+   reflow, no visible un-zoomed frame) and picks a factor for one of three regimes:
+   (a) content WIDER than the viewport (scrollWidth > clientWidth) -> shrink, factor =
+   clientWidth/scrollWidth (the classic case); (b) a centered content column NARROWER
+   than the viewport (the widest block that still leaves a side margin) -> enlarge to
+   fill, factor = clientWidth/contentWidth (this is what makes a letterboxed responsive
+   site like washingtonpost.com go to ~1.48 instead of no-opping); (c) fluid
+   edge-to-edge -> nothing to fit, returns `fits: true` and the popup shows "Already
+   fits the width". Clamped to [0.25, 5.0], rounded to 0.01. The enlarge case does ONE
+   re-check tracking the same element (measuring under CSS zoom is unreliable -
+   clientWidth is zoom-invariant while getBoundingClientRect rescales, and re-selecting
+   the widest block diverges). Returns `{ factor, fits }`. Driven by the popup "Fit
+   width" button and a `zoom-autofit` command (no default key; bind at
+   chrome://extensions/shortcuts). Covered by `tests/autofit.spec.js` (shrink, fill,
+   clamp, and the fluid no-op), with a `/narrow` fixture for the fill case.
 2. eTLD+1 keying option [M]. OPEN. Optionally collapse subdomains to the registrable
    domain. Requires a public-suffix list (bundle a static copy of the PSL; do not
    fetch at runtime, MV3 forbids remote code). Make it a toggle in the options page,
@@ -326,9 +336,10 @@ the original Zoom Page WE. Status of the highest-signal candidates for this rewr
   the action simply does nothing harmful.
 - Set a site back to 100% and confirm its storage key is removed (check via the popup
   showing 100% and, if you want, `chrome.storage.local.get(null)` in the SW console).
-- Click "Fit width" in the popup on a wide site. Confirm the page reflows so its width
-  fits the window and the percent/badge update. On a normal-width site, confirm it
-  stays near 100%.
+- Click "Fit width" in the popup. On a too-wide page it shrinks to fit; on a
+  letterboxed site (e.g. washingtonpost.com on a wide window) it ENLARGES so the content
+  column fills the window (~125-150%); on a fluid edge-to-edge site it stays put and
+  shows "Already fits the width". Confirm the percent/badge update accordingly.
 - On a zoomed site, open the popup and check "Disable here". Confirm the page drops to
   100%, the popup shows "Off" with dimmed controls, and the badge shows "off". Confirm
   native Ctrl +/- now do Chrome's own zoom (its bubble appearing is expected) while the

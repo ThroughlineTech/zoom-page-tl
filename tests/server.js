@@ -32,6 +32,13 @@ const routes = {
       "wide",
       '<div id="wide" style="width:3000px;height:24px;background:#9ca3af"></div>'
     ),
+  // A centered, capped content column narrower than the viewport (the WaPo-style
+  // "letterboxed" case): AutoFit should enlarge to fill it, not no-op.
+  "/narrow": () =>
+    page(
+      "narrow",
+      '<div id="col" style="max-width:600px;margin:0 auto;height:400px;background:#9ca3af"></div>'
+    ),
 };
 
 const server = http.createServer((req, res) => {
