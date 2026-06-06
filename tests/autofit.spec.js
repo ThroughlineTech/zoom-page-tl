@@ -100,6 +100,23 @@ test("AutoFit fills a centered column narrower than the window", async ({
   expect(fill).toBeGreaterThan(0.9);
 });
 
+test("AutoFit fills the real column and ignores a full-bleed breakout", async ({
+  page,
+  serviceWorker,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto("/messy");
+
+  const tabId = await tabIdFor(serviceWorker, "localhost");
+  const resp = await runAutofit(serviceWorker, tabId);
+
+  // 1200 column in a 1600 viewport => ~1.33. The -400px breakout overflows the
+  // viewport, but it must NOT trigger a shrink (the CNN regression).
+  expect(resp.fits).toBe(false);
+  expect(resp.factor).toBeGreaterThan(1.25);
+  expect(resp.factor).toBeLessThan(1.4);
+});
+
 test("AutoFit clamps an extremely wide page to the minimum factor", async ({
   page,
   serviceWorker,

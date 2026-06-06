@@ -262,21 +262,27 @@ http vs https share a key (hostname ignores scheme). See Backlog for the eTLD+1 
 Each item lists effort as S/M/L. Items 1, 3, 4, and 7 are DONE (see notes); the rest
 remain open.
 
-1. AutoFit-to-width [M]. DONE (revised). content.js measures at scale 1 (forced sync
-   reflow, no visible un-zoomed frame) and picks a factor for one of three regimes:
-   (a) content WIDER than the viewport (scrollWidth > clientWidth) -> shrink, factor =
-   clientWidth/scrollWidth (the classic case); (b) a centered content column NARROWER
-   than the viewport (the widest block that still leaves a side margin) -> enlarge to
-   fill, factor = clientWidth/contentWidth (this is what makes a letterboxed responsive
-   site like washingtonpost.com go to ~1.48 instead of no-opping); (c) fluid
-   edge-to-edge -> nothing to fit, returns `fits: true` and the popup shows "Already
-   fits the width". Clamped to [0.25, 5.0], rounded to 0.01. The enlarge case does ONE
-   re-check tracking the same element (measuring under CSS zoom is unreliable -
-   clientWidth is zoom-invariant while getBoundingClientRect rescales, and re-selecting
-   the widest block diverges). Returns `{ factor, fits }`. Driven by the popup "Fit
-   width" button and a `zoom-autofit` command (no default key; bind at
-   chrome://extensions/shortcuts). Covered by `tests/autofit.spec.js` (shrink, fill,
-   clamp, and the fluid no-op), with a `/narrow` fixture for the fill case.
+1. AutoFit-to-width [M]. DONE (revised twice). content.js measures at scale 1 (forced
+   sync reflow, no visible un-zoomed frame). `pickContentTargets` scans block elements
+   (height >= 100, width >= 200) once, SKIPPING breakouts (left < -20: elements pulled
+   off the left edge with negative margins, e.g. full-bleed ad zones), and returns the
+   widest INSET block (leaves a side margin: the content column) and the widest block
+   overall. Then three regimes: (a) an inset content column -> enlarge to fill, factor =
+   clientWidth/columnWidth (makes washingtonpost.com ~1.48 and cnn.com ~1.2-1.5 instead
+   of no-opping); (b) no inset column but the widest block exceeds the viewport ->
+   shrink to fit it; (c) neither -> fluid edge-to-edge, returns `fits: true` and the
+   popup shows "Already fits the width". We deliberately do NOT use
+   documentElement.scrollWidth - ad breakouts pollute it (cnn.com had ~9-280px of
+   phantom overflow that tipped the old shrink branch into a ~1.0 no-op). Clamped to
+   [0.25, 5.0], rounded to 0.01; a result within [0.99, 1.01] counts as "fits". One
+   re-check tracks the SAME element (measuring under CSS zoom is unreliable - clientWidth
+   is zoom-invariant while getBoundingClientRect rescales, and re-selecting the widest
+   block diverges). Returns `{ factor, fits }`. Driven by the popup "Fit width" button
+   and a `zoom-autofit` command (no default key). Covered by `tests/autofit.spec.js`
+   (shrink, fill, breakout-ignore, clamp, fluid no-op) with `/wide`, `/narrow`, `/messy`
+   fixtures. NOTE: real-world pages are messy (ads, breakouts, layouts that shift as
+   content loads), so AutoFit is best-effort and the exact factor can vary by load; the
+   clamps and the "fits" fallback bound the worst case.
 2. eTLD+1 keying option [M]. OPEN. Optionally collapse subdomains to the registrable
    domain. Requires a public-suffix list (bundle a static copy of the PSL; do not
    fetch at runtime, MV3 forbids remote code). Make it a toggle in the options page,

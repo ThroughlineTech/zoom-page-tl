@@ -26,11 +26,11 @@ function page(title, bodyExtra, extraCss) {
 
 const routes = {
   "/": () => page("core"),
-  // A page whose content is far wider than any viewport, for AutoFit tests.
+  // A content block far wider than any viewport, for AutoFit shrink tests.
   "/wide": () =>
     page(
       "wide",
-      '<div id="wide" style="width:3000px;height:24px;background:#9ca3af"></div>'
+      '<div id="wide" style="width:3000px;height:400px;background:#9ca3af"></div>'
     ),
   // A centered, capped content column narrower than the viewport (the WaPo-style
   // "letterboxed" case): AutoFit should enlarge to fill it, not no-op.
@@ -38,6 +38,17 @@ const routes = {
     page(
       "narrow",
       '<div id="col" style="max-width:600px;margin:0 auto;height:400px;background:#9ca3af"></div>'
+    ),
+  // An inset content column inside a full-width wrapper, plus a full-bleed
+  // "breakout" pulled off the left edge with a negative margin (the CNN ad-zone
+  // pattern). AutoFit must fill the column and ignore the breakout's overflow.
+  "/messy": () =>
+    page(
+      "messy",
+      '<div style="background:#111">' +
+        '<div id="col" style="max-width:1200px;margin:0 auto;height:600px;background:#9ca3af"></div>' +
+        '<div id="breakout" style="width:2400px;margin-left:-400px;height:300px;background:#444"></div>' +
+        "</div>"
     ),
 };
 

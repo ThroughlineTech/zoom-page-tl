@@ -74,32 +74,44 @@
     return Math.round(f * 100) / 100; // 0.01 precision => clean storage/badge
   }
 
-  // The widest content block that still leaves a side margin: a centered/capped
-  // container, not a full-bleed background. This is the column AutoFit fills.
-  function widestContentElement(viewport) {
-    if (!document.body) return null;
-    let best = null;
-    let bestW = 0;
+  // Scan content blocks once and return the two candidates AutoFit chooses
+  // between: the widest INSET column (a centered/capped container that leaves a
+  // side margin - what we enlarge to fill) and the widest block OVERALL (which,
+  // if it exceeds the viewport, is genuinely-too-wide content to shrink). We skip
+  // breakouts (elements pulled off the left edge with negative margins, e.g.
+  // full-bleed ad zones) because their off-screen spill is not content to fit and
+  // would otherwise masquerade as overflow. (This is why we do NOT trust
+  // documentElement.scrollWidth - ad breakouts pollute it.)
+  function pickContentTargets(viewport) {
+    let column = null,
+      columnW = 0;
+    let widest = null,
+      widestW = 0;
+    if (!document.body) return { column, widest };
     for (const el of document.body.querySelectorAll("*")) {
       const r = el.getBoundingClientRect();
-      if (r.width < 200 || r.height < 100) continue; // not a real content block
-      if (viewport - r.width < 20) continue; // full-bleed; nothing to fill
-      if (r.width > bestW) {
-        bestW = r.width;
-        best = el;
+      if (r.height < 100 || r.width < 200) continue; // not a real content block
+      if (r.left < -20) continue; // breakout pulled off the left edge; ignore
+      if (r.width > widestW) {
+        widestW = r.width;
+        widest = el;
+      }
+      if (viewport - r.width >= 20 && r.width > columnW) {
+        columnW = r.width; // inset (has a side margin)
+        column = el;
       }
     }
-    return best;
+    return { column, widest };
   }
 
-  // AutoFit-to-width. Three regimes (see HANDOFF section 9): content wider than
-  // the viewport shrinks to fit; a centered content column narrower than the
-  // viewport enlarges to fill it; a fluid edge-to-edge page already fits at every
-  // zoom, so there is nothing to do. Returns { factor, fits } where fits=true
-  // means "no change worth making". Measuring under CSS zoom is unreliable
-  // (clientWidth is zoom-invariant while getBoundingClientRect rescales), so we
-  // compute once at scale 1 and, for the enlarge case, do a single re-check that
-  // tracks the SAME element (re-selecting the widest block would diverge).
+  // AutoFit-to-width. Three regimes (see HANDOFF section 9): a centered content
+  // column narrower than the viewport enlarges to fill it (the common case); a
+  // genuinely-too-wide block shrinks to fit; a fluid edge-to-edge page already
+  // fits at every zoom, so there is nothing to do. Returns { factor, fits } where
+  // fits=true means "no change worth making". Measuring under CSS zoom is
+  // unreliable (clientWidth is zoom-invariant while getBoundingClientRect
+  // rescales), so we compute once at scale 1 and do a single re-check that tracks
+  // the SAME element (re-selecting the widest block would diverge).
   function computeAutofitFactor() {
     const html = document.documentElement;
     html.style.zoom = ""; // measure at scale 1 (reading width forces a reflow)
@@ -107,23 +119,21 @@
     const viewport = html.clientWidth;
     if (!viewport) return { factor: 1, fits: true };
 
-    // Regime 1: content overflows the viewport -> shrink to fit.
-    if (html.scrollWidth > viewport + 1) {
-      return { factor: clampF(viewport / html.scrollWidth), fits: false };
+    const { column, widest } = pickContentTargets(viewport);
+
+    let el, factor;
+    if (column) {
+      el = column; // a centered/inset content column -> fill it
+      factor = clampF(viewport / column.getBoundingClientRect().width);
+    } else if (widest && widest.getBoundingClientRect().width > viewport + 20) {
+      el = widest; // no inset column, but content is genuinely too wide -> shrink
+      factor = clampF(viewport / widest.getBoundingClientRect().width);
+    } else {
+      return { factor: 1, fits: true }; // fluid edge-to-edge: nothing to fit
     }
+    if (factor >= 0.99 && factor <= 1.01) return { factor: 1, fits: true };
 
-    // Regime 2/3: no overflow. Find the centered content column to fill.
-    const el = widestContentElement(viewport);
-    if (!el) return { factor: 1, fits: true }; // fluid edge-to-edge
-
-    const contentW = el.getBoundingClientRect().width;
-    if (contentW <= 0 || viewport - contentW < 20) {
-      return { factor: 1, fits: true };
-    }
-    let factor = clampF(viewport / contentW);
-    if (factor <= 1.01) return { factor: 1, fits: true };
-
-    // Single re-check tracking the same element: does it actually fill at the
+    // Single re-check tracking the same element: did it actually fill at the
     // chosen factor? If a breakpoint shifted its width, correct once.
     html.style.zoom = String(factor);
     void html.offsetWidth;
