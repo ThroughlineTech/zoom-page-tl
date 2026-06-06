@@ -231,6 +231,115 @@ test("options UI lists saved sites, edits a level, and removes a site", async ({
   expect(stored["z:beta.example.com"]).toBeUndefined();
 });
 
+test("listSites includes paused-only sites and marks pause state", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({
+      "z:a.example.com": 1.5,
+      "x:b.example.com": true,
+      "z:c.example.com": 1.2,
+      "x:c.example.com": true,
+    })
+  );
+  await openOptions(page, extensionId);
+  const sites = await page.evaluate(() => window.ZP.listSites());
+  expect(sites).toEqual([
+    { host: "a.example.com", factor: 1.5, paused: false },
+    { host: "b.example.com", factor: null, paused: true },
+    { host: "c.example.com", factor: 1.2, paused: true },
+  ]);
+});
+
+test("options UI lists a paused-only site and resumes it", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({ "x:paused.example.com": true })
+  );
+  await openOptions(page, extensionId);
+
+  const row = page.locator("#sites tr", { hasText: "paused.example.com" });
+  await expect(row).toHaveCount(1);
+  await expect(row.locator(".tag")).toHaveText("Paused");
+  await expect(row.locator("input")).toBeDisabled();
+
+  await row.locator("button.toggle").click(); // Resume
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(() =>
+        chrome.storage.local
+          .get("x:paused.example.com")
+          .then((r) => r["x:paused.example.com"])
+      )
+    )
+    .toBeUndefined();
+  // With no level and no pause key, the site is no longer customized.
+  await expect(page.locator("#sites tr")).toHaveCount(0);
+});
+
+test("options UI pauses an active site and keeps its level", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({ "z:active.example.com": 1.5 })
+  );
+  await openOptions(page, extensionId);
+
+  const row = page.locator("#sites tr", { hasText: "active.example.com" });
+  await expect(row.locator("input")).not.toBeDisabled();
+
+  await row.locator("button.toggle").click(); // Pause
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(() =>
+        chrome.storage.local
+          .get("x:active.example.com")
+          .then((r) => r["x:active.example.com"])
+      )
+    )
+    .toBe(true);
+  await expect(row.locator(".tag")).toHaveText("Paused");
+  await expect(row.locator("input")).toBeDisabled();
+  // The saved level survives a pause so resuming restores it.
+  expect(
+    await serviceWorker.evaluate(() =>
+      chrome.storage.local
+        .get("z:active.example.com")
+        .then((r) => r["z:active.example.com"])
+    )
+  ).toBe(1.5);
+});
+
+test("removeSite clears the level, pause, and auto-fit keys together", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({
+      "z:gone.example.com": 1.5,
+      "x:gone.example.com": true,
+      "af:gone.example.com": true,
+    })
+  );
+  await openOptions(page, extensionId);
+  await page.evaluate(() => window.ZP.removeSite("gone.example.com"));
+
+  const stored = await serviceWorker.evaluate(() =>
+    chrome.storage.local.get(null)
+  );
+  expect(stored["z:gone.example.com"]).toBeUndefined();
+  expect(stored["x:gone.example.com"]).toBeUndefined();
+  expect(stored["af:gone.example.com"]).toBeUndefined();
+});
+
 test("default zoom field writes the default and resets it", async ({
   page,
   extensionId,

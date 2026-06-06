@@ -193,9 +193,13 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
 - `extension/options.html` / `extension/options.js`
   The options page (also reachable from the popup footer). Three sections: a global
   default zoom for un-customized sites (stored under `cfg:defaultZoom`); a manage-list
-  of every saved site with inline level editing and per-row remove; and JSON
-  import/export of all levels. The pure storage operations are also exposed on
-  `window.ZP` so the test suite can drive import/export without a file dialog.
+  of every customized site with inline level editing, a per-row Pause/Resume toggle,
+  and per-row remove; and JSON import/export of all levels. The site manager lists the
+  union of sites that have a level (`z:`) AND sites that are only paused (`x:` with no
+  level) - so a site paused from the popup is visible and resumable here, marked with a
+  "Paused" tag and a disabled level field (resume to edit). Remove forgets the site
+  entirely (drops `z:`, `x:`, and `af:`). The pure storage operations are also exposed
+  on `window.ZP` so the test suite can drive them without a file dialog.
 
 - `extension/icons/`
   16/32/48/128 PNG magnifier icons (generated, blue rounded square).
@@ -237,7 +241,8 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   browser's zoom bubble) back to Chrome - the deliberate "act as if the extension is not
   here" behavior for opted-out sites. The `z:<host>` factor is left intact, so removing
   `x:<host>` restores both the previous level and the `"disabled"` (no-bubble) mode live.
-  Absence means enabled. Written by the popup "Disable here" toggle.
+  Absence means enabled. Written by the popup "Disable here" toggle, and managed from the
+  options site manager (which lists paused-only sites and offers a Pause/Resume toggle).
 - Auto-fit mode: `af:<hostname>` = `true` marks a site as auto-fit. `z:<host>` still
   holds the applied factor (the cached last fit, so it applies on first paint), but the
   site re-runs AutoFit once the page settles (on `load`, debounced, and on resize) and
@@ -344,9 +349,11 @@ the original Zoom Page WE. Status of the highest-signal candidates for this rewr
   badge shows "off". This is the most-requested feature and the workaround for sites
   that misbehave under zoom (buglist #3 chatgpt.com, #14). A paused site also restores
   native browser zoom (the worker sets the tab to `"automatic"`), so Chrome's own
-  Ctrl +/- and zoom bubble work there - DONE. Remaining follow-ups: surface and manage
-  `x:` sites in the options page, and include them in JSON export/import (today export
-  covers only `z:*` and `cfg:defaultZoom`).
+  Ctrl +/- and zoom bubble work there - DONE. The options site manager now surfaces and
+  manages `x:` sites too: a paused-only site (no `z:` level) appears with a "Paused" tag
+  and a Pause/Resume toggle, and Remove clears `z:`/`x:`/`af:` together
+  (`tests/options.spec.js`) - DONE. Remaining follow-up: include `x:` sites in JSON
+  export/import (today export covers only `z:*` and `cfg:defaultZoom`).
 - CSS-zoom site-compat bugs (e.g. cursor hit-offset at non-100% zoom on map/overlay
   UIs) - OPEN.
 - A durable persistence regression test (incognito + restart + new tab) - OPEN.

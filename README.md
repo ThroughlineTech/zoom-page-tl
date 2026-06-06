@@ -33,8 +33,10 @@ zoom only. See `HANDOFF.md` for the full design rationale and the engineering br
   that misbehave under zoom. The badge shows "off" while paused.
 - The toolbar badge shows the current site's zoom percent.
 - "Options" (popup footer, or the extension's options page) lets you set a global
-  default zoom for new sites, manage every saved site, and import/export your
-  levels as JSON.
+  default zoom for new sites, manage every saved site - edit its level, pause/resume it,
+  or remove it - and import/export your levels as JSON. Sites you paused with "Disable
+  here" show up here too (tagged "Paused"), so you can resume them without revisiting the
+  page.
 
 ## Layout
 

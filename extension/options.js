@@ -57,16 +57,42 @@ async function setSite(host, factor) {
   }
 }
 
-async function removeSite(host) {
-  await chrome.storage.local.remove(hostKey(host));
+// Pause / resume a site (the popup's "Disable here", manageable from here too).
+// Writes x:<host>; content.js holds the page at 100% and hands native zoom back
+// to Chrome. The z: level is left intact so resuming restores it.
+async function setPaused(host, paused) {
+  if (!host) return;
+  const xKey = "x:" + host;
+  if (paused) {
+    await chrome.storage.local.set({ [xKey]: true });
+  } else {
+    await chrome.storage.local.remove(xKey);
+  }
 }
 
+// Forget a site entirely: drop its level, pause flag, and auto-fit mode.
+async function removeSite(host) {
+  await chrome.storage.local.remove([hostKey(host), "x:" + host, "af:" + host]);
+}
+
+// Every customized site: those with a stored level (z:) and those that are only
+// paused (x: with no level). factor is the stored level or null when absent.
 async function listSites() {
   const all = await chrome.storage.local.get(null);
-  const sites = [];
+  const byHost = new Map();
+  const entry = (host) => {
+    let e = byHost.get(host);
+    if (!e) {
+      e = { host, factor: null, paused: false };
+      byHost.set(host, e);
+    }
+    return e;
+  };
   for (const k of Object.keys(all)) {
-    if (k.startsWith("z:")) sites.push({ host: k.slice(2), factor: all[k] });
+    if (k.startsWith("z:")) entry(k.slice(2)).factor = all[k];
+    else if (k.startsWith("x:")) entry(k.slice(2)).paused = true;
   }
+  const sites = [...byHost.values()];
   sites.sort((a, b) => a.host.localeCompare(b.host));
   return sites;
 }
@@ -130,16 +156,23 @@ async function renderDefault() {
 }
 
 async function renderSites() {
-  const sites = await listSites();
+  const [sites, def] = await Promise.all([listSites(), getDefault()]);
   $sites.textContent = "";
   $empty.hidden = sites.length > 0;
 
-  for (const { host, factor } of sites) {
+  for (const { host, factor, paused } of sites) {
     const tr = document.createElement("tr");
+    if (paused) tr.className = "paused";
 
     const tdHost = document.createElement("td");
     tdHost.className = "host";
     tdHost.textContent = host;
+    if (paused) {
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = "Paused";
+      tdHost.append(" ", tag);
+    }
 
     const tdLvl = document.createElement("td");
     tdLvl.className = "lvl";
@@ -148,7 +181,11 @@ async function renderSites() {
     input.min = "25";
     input.max = "500";
     input.step = "5";
-    input.value = pct(factor);
+    // A paused-only site has no stored level; show the default it will follow.
+    input.value = pct(factor != null ? factor : def);
+    // Zoom is inert while paused (like the popup's dimmed controls); resume to edit.
+    input.disabled = paused;
+    if (paused) input.title = "Resume the site to change its level";
     input.addEventListener("change", async () => {
       await setSite(host, Number(input.value) / 100);
       await renderSites();
@@ -160,6 +197,14 @@ async function renderSites() {
 
     const tdAct = document.createElement("td");
     tdAct.className = "act";
+    const toggle = document.createElement("button");
+    toggle.className = "toggle";
+    toggle.textContent = paused ? "Resume" : "Pause";
+    toggle.addEventListener("click", async () => {
+      await setPaused(host, !paused);
+      await renderSites();
+      setStatus(paused ? `Resumed ${host}.` : `Paused ${host}.`);
+    });
     const rm = document.createElement("button");
     rm.className = "remove";
     rm.textContent = "Remove";
@@ -168,7 +213,7 @@ async function renderSites() {
       await renderSites();
       setStatus(`Removed ${host}.`);
     });
-    tdAct.appendChild(rm);
+    tdAct.append(toggle, rm);
 
     tr.append(tdHost, tdLvl, tdAct);
     $sites.appendChild(tr);
@@ -250,6 +295,7 @@ window.ZP = {
   getDefault,
   setDefault,
   setSite,
+  setPaused,
   removeSite,
   listSites,
   exportData,
