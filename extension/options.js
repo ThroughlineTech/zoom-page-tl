@@ -71,6 +71,19 @@ async function setExcluded(host, excluded) {
   }
 }
 
+// Auto-fit mode (af:, opt-in): the site re-fits on every page load/resize. The
+// content script picks this up live; toggling off keeps the last fit as a fixed
+// level.
+async function setAuto(host, auto) {
+  if (!host) return;
+  const afKey = "af:" + host;
+  if (auto) {
+    await chrome.storage.local.set({ [afKey]: true });
+  } else {
+    await chrome.storage.local.remove(afKey);
+  }
+}
+
 // Pause (p:, suspend for now) / resume a site. The z: level is left intact so
 // resuming restores it.
 async function setPaused(host, paused) {
@@ -96,7 +109,7 @@ async function listSites() {
   const entry = (host) => {
     let e = byHost.get(host);
     if (!e) {
-      e = { host, factor: null, excluded: false, paused: false };
+      e = { host, factor: null, excluded: false, paused: false, auto: false };
       byHost.set(host, e);
     }
     return e;
@@ -105,6 +118,7 @@ async function listSites() {
     if (k.startsWith("z:")) entry(k.slice(2)).factor = all[k];
     else if (k.startsWith("x:")) entry(k.slice(2)).excluded = true;
     else if (k.startsWith("p:")) entry(k.slice(2)).paused = true;
+    else if (k.startsWith("af:")) entry(k.slice(3)).auto = true;
   }
   const sites = [...byHost.values()];
   sites.sort((a, b) => a.host.localeCompare(b.host));
@@ -197,20 +211,19 @@ function makeRemoveButton(host) {
 }
 
 function makeRow(site, def) {
-  const { host, factor, excluded, paused } = site;
+  const { host, factor, excluded, paused, auto } = site;
   const tr = document.createElement("tr");
   if (excluded) tr.className = "excluded";
   else if (paused) tr.className = "paused";
 
   const tdHost = document.createElement("td");
   tdHost.className = "host";
-  tdHost.textContent = host;
-  if (paused && !excluded) {
-    const tag = document.createElement("span");
-    tag.className = "tag";
-    tag.textContent = "Paused";
-    tdHost.append(" ", tag);
-  }
+  const link = document.createElement("a");
+  link.href = "https://" + host + "/";
+  link.textContent = host;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  tdHost.appendChild(link);
 
   const tdLvl = document.createElement("td");
   tdLvl.className = "lvl";
@@ -219,14 +232,18 @@ function makeRow(site, def) {
   input.min = "25";
   input.max = "500";
   input.step = "5";
-  // Excluded/paused sites have no live level; show the level they would use
-  // (their stored one, or the default) but disable editing - include/resume first.
+  // The level is directly editable only on a plain fixed Active site. Auto manages
+  // it, and excluded/paused sites are not zoomed - show the value (their stored one
+  // or the default) but grey it out and disable it. (Highlighted Auto / the
+  // Resume button / the Excluded list say which state it is.)
   input.value = pct(factor != null ? factor : def);
-  input.disabled = excluded || paused;
+  input.disabled = excluded || paused || auto;
   if (input.disabled) {
     input.title = excluded
       ? "Include the site to change its level"
-      : "Resume the site to change its level";
+      : paused
+      ? "Resume the site to change its level"
+      : "Auto-fit manages this level; turn Auto off to set it manually";
   }
   input.addEventListener("change", async () => {
     await setSite(host, Number(input.value) / 100);
@@ -237,32 +254,41 @@ function makeRow(site, def) {
   span.textContent = " %";
   tdLvl.append(input, span);
 
-  const tdAct = document.createElement("td");
-  tdAct.className = "act";
-  if (excluded) {
-    tdAct.append(
-      makeButton("Include", async () => {
+  // Every row gets the same four controls in the same order, so the columns line
+  // up across the Active and Excluded lists. Only the 3rd flips: Exclude / Include.
+  const autoBtn = makeButton("Auto", async () => {
+    await setAuto(host, !auto);
+    await renderSites();
+    setStatus(auto ? `${host}: fixed level.` : `${host}: auto-fit on.`);
+  });
+  autoBtn.title = "Auto-fit this site on every page load";
+  if (auto) autoBtn.className = "on";
+
+  const pauseBtn = makeButton(paused ? "Resume" : "Pause", async () => {
+    await setPaused(host, !paused);
+    await renderSites();
+    setStatus(paused ? `Resumed ${host}.` : `Paused ${host}.`);
+  });
+
+  const toggleBtn = excluded
+    ? makeButton("Include", async () => {
         await setExcluded(host, false);
         await renderSites();
         setStatus(`Included ${host}.`);
-      }),
-      makeRemoveButton(host)
-    );
-  } else {
-    tdAct.append(
-      makeButton(paused ? "Resume" : "Pause", async () => {
-        await setPaused(host, !paused);
-        await renderSites();
-        setStatus(paused ? `Resumed ${host}.` : `Paused ${host}.`);
-      }),
-      makeButton("Exclude", async () => {
+      })
+    : makeButton("Exclude", async () => {
         await setExcluded(host, true);
         await renderSites();
         setStatus(`Excluded ${host}.`);
-      }),
-      makeRemoveButton(host)
-    );
-  }
+      });
+
+  const btns = document.createElement("div");
+  btns.className = "btns";
+  btns.append(autoBtn, pauseBtn, toggleBtn, makeRemoveButton(host));
+
+  const tdAct = document.createElement("td");
+  tdAct.className = "act";
+  tdAct.append(btns);
 
   tr.append(tdHost, tdLvl, tdAct);
   return tr;
@@ -365,6 +391,7 @@ window.ZP = {
   setSite,
   setExcluded,
   setPaused,
+  setAuto,
   removeSite,
   listSites,
   exportData,

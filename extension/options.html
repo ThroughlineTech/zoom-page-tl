@@ -66,25 +66,34 @@
     cursor: pointer;
   }
   button:hover { background: var(--btn-hover); }
-  table { width: 100%; border-collapse: collapse; }
+  /* Fixed layout so the Active and Excluded tables line up column-for-column. */
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  col.c-zoom { width: 86px; }
+  col.c-act { width: 280px; }
   th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 4px 8px; }
   td { padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
   td.host { font-variant-numeric: tabular-nums; word-break: break-all; }
-  td.lvl input { width: 72px; }
-  td.act { text-align: right; white-space: nowrap; }
-  td.act button + button { margin-left: 8px; }
-  .remove { color: var(--danger); }
-  tr.paused td.host { color: var(--muted); }
-  .tag {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--muted);
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 1px 7px;
-    vertical-align: middle;
+  td.host a { color: inherit; text-decoration: none; }
+  td.host a:hover { color: var(--accent); text-decoration: underline; }
+  td.lvl { white-space: nowrap; }
+  td.lvl input { width: 54px; }
+  /* Every row has the same 4 action buttons in an even grid -> they align. */
+  td.act .btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  td.act button { width: 100%; padding: 6px 4px; font-size: 12px; }
+  td.act button.on {
+    background: var(--accent);
+    color: var(--accent-fg);
+    border-color: var(--accent);
   }
+  .remove { color: var(--danger); }
+  /* Greyed + non-editable when the level is not manually settable (auto/paused/excluded). */
+  input:disabled {
+    color: var(--muted);
+    background: var(--btn);
+    cursor: not-allowed;
+  }
+  tr.paused td.host,
+  tr.excluded td.host { color: var(--muted); }
   .empty { color: var(--muted); font-size: 13px; padding: 8px; }
   h3.grp {
     font-size: 11px;
@@ -94,8 +103,9 @@
     color: var(--muted);
     margin: 16px 0 4px;
   }
-  .scroll { max-height: 320px; overflow-y: auto; }
-  tr.excluded td.host { color: var(--muted); }
+  /* Reserve the scrollbar gutter on BOTH lists so a scrollbar on one (when it
+     overflows) does not shift its columns out of line with the other. */
+  .scroll { max-height: 320px; overflow-y: auto; scrollbar-gutter: stable; }
   .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .status { color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 8px; }
 </style>
@@ -130,6 +140,7 @@
     <h3 class="grp">Active</h3>
     <div class="scroll">
       <table>
+        <colgroup><col /><col class="c-zoom" /><col class="c-act" /></colgroup>
         <thead><tr><th>Site</th><th>Zoom</th><th></th></tr></thead>
         <tbody id="active"></tbody>
       </table>
@@ -139,6 +150,7 @@
     <h3 class="grp">Excluded</h3>
     <div class="scroll">
       <table>
+        <colgroup><col /><col class="c-zoom" /><col class="c-act" /></colgroup>
         <thead><tr><th>Site</th><th>Zoom</th><th></th></tr></thead>
         <tbody id="excluded"></tbody>
       </table>

@@ -259,10 +259,79 @@ test("listSites reports level, excluded, and paused state", async ({
   await openOptions(page, extensionId);
   const sites = await page.evaluate(() => window.ZP.listSites());
   expect(sites).toEqual([
-    { host: "a.example.com", factor: 1.5, excluded: false, paused: false },
-    { host: "b.example.com", factor: null, excluded: true, paused: false },
-    { host: "c.example.com", factor: 1.2, excluded: false, paused: true },
+    { host: "a.example.com", factor: 1.5, excluded: false, paused: false, auto: false },
+    { host: "b.example.com", factor: null, excluded: true, paused: false, auto: false },
+    { host: "c.example.com", factor: 1.2, excluded: false, paused: true, auto: false },
   ]);
+});
+
+test("options UI toggles Auto for an active site", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({ "z:fit.example.com": 1.3 })
+  );
+  await openOptions(page, extensionId);
+
+  const row = page.locator("#active tr", { hasText: "fit.example.com" });
+  await expect(row.locator("input")).not.toBeDisabled();
+
+  await row.locator("button", { hasText: "Auto" }).click();
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(() =>
+        chrome.storage.local
+          .get("af:fit.example.com")
+          .then((r) => r["af:fit.example.com"])
+      )
+    )
+    .toBe(true);
+  // Auto on: level field greyed/disabled, the Auto button highlighted.
+  await expect(row.locator("input")).toBeDisabled();
+  await expect(row.locator("button.on")).toHaveText("Auto");
+  // Still in the Active list (not moved anywhere).
+  await expect(page.locator("#active tr", { hasText: "fit.example.com" })).toHaveCount(
+    1
+  );
+
+  // Toggle off: af cleared, level editable again.
+  await row.locator("button", { hasText: "Auto" }).click();
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(() =>
+        chrome.storage.local
+          .get("af:fit.example.com")
+          .then((r) => r["af:fit.example.com"])
+      )
+    )
+    .toBeUndefined();
+  await expect(
+    page.locator("#active tr", { hasText: "fit.example.com" }).locator("input")
+  ).not.toBeDisabled();
+});
+
+test("site names are links that open the site", async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({
+      "z:news.example.com": 1.2,
+      "x:gone.example.com": true,
+    })
+  );
+  await openOptions(page, extensionId);
+
+  await expect(
+    page.locator("#active tr a", { hasText: "news.example.com" })
+  ).toHaveAttribute("href", "https://news.example.com/");
+  // Excluded names are linked too.
+  await expect(
+    page.locator("#excluded tr a", { hasText: "gone.example.com" })
+  ).toHaveAttribute("href", "https://gone.example.com/");
 });
 
 test("options UI lists active sites, edits a level, and removes a site", async ({
@@ -392,12 +461,12 @@ test("options UI pauses an active site (stays Active, tagged) and resumes", asyn
       )
     )
     .toBe(true);
-  // Still Active (not moved to Excluded), now tagged and disabled.
+  // Still Active (not moved to Excluded); now greyed, and Pause flipped to Resume.
   await expect(page.locator("#active tr", { hasText: "blog.example.com" })).toHaveCount(
     1
   );
   await expect(page.locator("#excluded tr")).toHaveCount(0);
-  await expect(row.locator(".tag")).toHaveText("Paused");
+  await expect(row.locator("button", { hasText: "Resume" })).toBeVisible();
   await expect(row.locator("input")).toBeDisabled();
 
   await row.locator("button", { hasText: "Resume" }).click();
