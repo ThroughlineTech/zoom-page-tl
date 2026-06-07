@@ -161,8 +161,10 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   page clobbers it - a
   MutationObserver on the `<html>` style attribute plus a `document` childList observer
   for wholesale `<html>` replacement (this is what keeps re-rendering sites like cnn.com
-  stable, and it is why a stored zoom survives the load churn). For `af:<host>` (auto-fit)
-  sites it re-runs AutoFit after `load` (debounced) and on resize. Wrapped in try/catch
+  stable, and it is why a stored zoom survives the load churn). This is re-ASSERT, not
+  re-MEASURE: Fit width is a one-shot that writes a fixed factor, and the page is never
+  re-fit on load or resize (the bouncing-per-page that caused was jarring); after `load`
+  it only re-asserts that fixed factor. Wrapped in try/catch
   for pages where the extension context is unavailable.
 
 - `extension/background.js`
@@ -171,8 +173,8 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   the toolbar badge to the current site's percent. A `storage.onChanged` listener also
   refreshes the active tab's badge so in-place edits (the content-script Ctrl +/- keys,
   the popup, the options page) keep the badge in sync. Handles the keyboard commands by
-  stepping the active site's factor and writing it back to storage (manual commands also
-  clear `af:<host>`, leaving auto-fit mode; `zoom-autofit` sets it). `getFactor` resolves
+  stepping the active site's factor and writing it back to storage (`zoom-autofit` just
+  forwards a one-shot autofit message to the content script). `getFactor` resolves
   the factor the same way content.js does (`z:<host>` -> `cfg:defaultZoom` -> 1.0), so
   both the command stepping base and the badge are default-aware: with a non-100% global
   default, "zoom in" steps up from what is on screen and the badge shows that percent.
@@ -199,9 +201,9 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   "Exclude" (never zoom, `x:<host>`) - and an "Options" footer link. A top appbar holds a
   master On/Off power switch (writes `cfg:off`); when off everywhere the whole per-site UI
   dims and the switch reads "Off". Writes per-site
-  factor to storage on change; the content script reflects it live. "Fit width" enters
-  auto-fit mode (`af:<host>`) and stays highlighted while active; any manual zoom clears
-  it. While suppressed it shows "Paused"/"Off", dims the controls, and disables them;
+  factor to storage on change; the content script reflects it live. "Fit width" is a
+  one-shot: it measures once and writes a fixed level (click it again to re-fit). While
+  suppressed it shows "Paused"/"Off", dims the controls, and disables them;
   excluding supersedes a pause (it clears `p:` and disables the Pause toggle).
 
 - `extension/options.html` / `extension/options.js`
@@ -213,7 +215,7 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   button (moves the row to the Excluded list), and Remove; a paused active row shows a
   "Paused" tag and a disabled level field (resume to edit). Excluded rows show their
   cached level greyed, an Include button (moves it back to Active), and Remove. Remove
-  forgets the site entirely (drops `z:`, `x:`, `p:`, and `af:`). Each list is in a
+  forgets the site entirely (drops `z:`, `x:`, and `p:`). Each list is in a
   max-height scroll container (a per-list search filter is a future add as the lists
   grow). The pure storage operations are also exposed on `window.ZP` so the test suite
   can drive them without a file dialog.
@@ -274,14 +276,14 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   setting `x:` clears any `p:`. Absence of both means enabled. Written by the popup's Pause
   / Exclude toggles and the options site manager. (Historically `x:` was a single
   "disable" flag; it is now specifically Exclude, with Pause split out as `p:`.)
-- Auto-fit mode: `af:<hostname>` = `true` marks a site as auto-fit. `z:<host>` still
-  holds the applied factor (the cached last fit, so it applies on first paint), but the
-  site re-runs AutoFit once the page settles (on `load`, debounced, and on resize) and
-  updates `z:<host>` - so sites that reshape while loading (cnn.com) end up fit, not
-  measured-too-early. ANY manual zoom (popup stepper/preset/reset, Ctrl +/-/0, Alt+Shift
-  commands, an options-page level edit) clears `af:<host>`, so a level the user picks is
-  sticky and never re-fit. Set by the popup "Fit width" button and the `zoom-autofit`
-  command (which highlight while active).
+- No auto-fit MODE key. "Fit width" is a one-shot: it measures once and writes the result
+  as the ordinary fixed `z:<host>` level, so every page on the site then renders at that
+  level with no re-fit and no per-page bouncing. To re-fit (e.g. a page with a different
+  layout), click "Fit width" again. (A persistent `af:<host>` mode that re-fit on every
+  load/resize existed earlier and was REMOVED - the bouncing was jarring; the author wants
+  the percentage fixed per site. `background.js` `onInstalled` drops any leftover `af:`
+  keys.) The re-assert observers in content.js still keep that fixed level applied against
+  sites that clobber the inline zoom; that is re-assert, not re-measure.
 
 Keying is by `location.hostname`. This matches ZPWE's "treat domain and subdomains as
 separate sites" behavior: `x.com`, `www.x.com`, and `sub.x.com` are independent, and
@@ -332,11 +334,14 @@ remain open.
    (shrink, fill, breakout-ignore, clamp, fluid no-op) with `/wide`, `/narrow`, `/messy`
    fixtures. NOTE: real-world pages are messy (ads, breakouts, layouts that shift as
    content loads), so AutoFit is best-effort and the exact factor can vary by load; the
-   clamps and the "fits" fallback bound the worst case. AUTO-FIT MODE: "Fit width" is now
-   a persistent per-site mode (`af:<host>`), not a one-shot - the site re-fits after
-   `load` and on resize, so a site that reshapes while loading converges to the right fit
-   (cnn.com re-fits to ~1.47 once its slow `load` fires). A manual zoom clears the mode.
-   See `tests/autofit-mode.spec.js`.
+   clamps and the "fits" fallback bound the worst case. ONE-SHOT (revised): "Fit width" was
+   briefly a persistent per-site mode (`af:<host>`) that re-fit on every `load`/resize, but
+   that made the zoom bounce as each page measured differently - jarring. It is now a
+   one-shot: it measures once and writes a fixed `z:<host>` level; pages never re-fit, and
+   you click "Fit width" again to re-measure (e.g. a still-settling site, or a different
+   layout). The `af:` mode and its re-fit/resize logic were removed (a one-time
+   `onInstalled` migration drops leftover `af:` keys). The fixed-level no-re-fit guarantee
+   is covered by `tests/autofit.spec.js`; the re-assert by `tests/core.spec.js`.
 2. eTLD+1 keying option [M]. OPEN. Optionally collapse subdomains to the registrable
    domain. Requires a public-suffix list (bundle a static copy of the PSL; do not
    fetch at runtime, MV3 forbids remote code). Make it a toggle in the options page,
@@ -383,7 +388,7 @@ the original Zoom Page WE. Status of the highest-signal candidates for this rewr
   misbehave under zoom (buglist #3 chatgpt.com, #14). The popup has Pause + Exclude
   toggles; the options site manager splits into an Active list and an Excluded list and
   surfaces exclude-only / paused sites for management (Pause/Resume, Exclude/Include,
-  Remove clears `z:`/`x:`/`p:`/`af:`). Exclude is carried in JSON export/import (the
+  Remove clears `z:`/`x:`/`p:`). Exclude is carried in JSON export/import (the
   `excluded` array); pause is transient and not exported. Covered by
   `tests/exclude.spec.js`, `tests/pause.spec.js`, `tests/options.spec.js` - DONE.
 - CSS-zoom site-compat bugs (e.g. cursor hit-offset at non-100% zoom on map/overlay

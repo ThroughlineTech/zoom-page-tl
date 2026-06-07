@@ -212,7 +212,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   // AutoFit needs a live measurement, so it runs in the content script. The
   // content script writes storage itself; we just refresh the badge after.
   if (command === "zoom-autofit") {
-    await chrome.storage.local.set({ ["af:" + host]: true }); // enter auto-fit mode
+    // One-shot Fit width: the content script measures and writes a fixed level.
     try {
       await chrome.tabs.sendMessage(tab.id, { type: "autofit" });
     } catch (e) {
@@ -229,7 +229,6 @@ chrome.commands.onCommand.addListener(async (command) => {
     const cur = await getFactor(host);
     next = stepFrom(cur, command === "zoom-in" ? 1 : -1);
   }
-  await chrome.storage.local.remove("af:" + host); // manual zoom -> leave auto-fit mode
   await setFactor(host, next);
   refreshBadge(tab.id, host);
 });
@@ -237,3 +236,15 @@ chrome.commands.onCommand.addListener(async (command) => {
 // On service-worker wake, reflect the persisted global switch on the toolbar icon
 // (default_icon is the color one, so re-grey if we are off).
 isGloballyOff().then(applyActionIcon);
+
+// Migration: the persistent auto-fit mode (af:<host>) was replaced by a one-shot
+// Fit width that writes a fixed level. Drop any leftover af: keys once on update.
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    const all = await chrome.storage.local.get(null);
+    const stale = Object.keys(all).filter((k) => k.startsWith("af:"));
+    if (stale.length) await chrome.storage.local.remove(stale);
+  } catch (e) {
+    /* ignore */
+  }
+});

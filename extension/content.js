@@ -19,17 +19,17 @@
   const GLOBAL_OFF_KEY = "cfg:off"; // master switch: when set, off on every site
   const excludedKey = "x:" + host; // when set, this site is excluded (never zoom)
   const pausedKey = "p:" + host; // when set, zoom is paused (temporarily) for this host
-  const autoKey = "af:" + host; // when set, this site is in auto-fit mode
 
   const MIN = 0.25;
   const MAX = 5.0;
 
   // Cached state, kept current by refresh(): `suppressed` (excluded OR paused)
   // lets the keydown handler decide synchronously whether to let Ctrl +/- through;
-  // `autoMode` says the site re-fits on load/resize; `desired` is the factor we
-  // want on <html>, used to re-assert if the page clobbers it.
+  // `desired` is the factor we want on <html>, used to re-assert if the page
+  // clobbers it. Fit width is a ONE-SHOT: it measures once and writes a fixed
+  // factor; the page is never re-measured on load/resize (that bouncing was
+  // jarring), so a fitted level stays put until the user fits again.
   let suppressed = false;
-  let autoMode = false;
   let desired = 1.0;
 
   function apply(factor) {
@@ -52,12 +52,11 @@
   function refresh() {
     try {
       chrome.storage.local.get(
-        [key, DEFAULT_KEY, GLOBAL_OFF_KEY, excludedKey, pausedKey, autoKey],
+        [key, DEFAULT_KEY, GLOBAL_OFF_KEY, excludedKey, pausedKey],
         (res) => {
           if (chrome.runtime.lastError) return;
           suppressed =
             !!res[GLOBAL_OFF_KEY] || !!res[excludedKey] || !!res[pausedKey];
-          autoMode = !suppressed && !!res[autoKey];
           // Off globally, or excluded/paused here: leave the page at its natural
           // 100%, ignoring any stored factor and the global default.
           apply(suppressed ? 1.0 : resolve(res));
@@ -83,8 +82,7 @@
         changes[DEFAULT_KEY] ||
         changes[GLOBAL_OFF_KEY] ||
         changes[excludedKey] ||
-        changes[pausedKey] ||
-        changes[autoKey]
+        changes[pausedKey]
       ) {
         refresh();
       }
@@ -185,7 +183,7 @@
     if (Math.abs(factor - 1.0) < 1e-6) {
       await chrome.storage.local.remove(key); // 100% => store nothing
     } else {
-      await chrome.storage.local.set({ [key]: factor }); // af: untouched (stays auto)
+      await chrome.storage.local.set({ [key]: factor }); // fixed level until refit
     }
     return { factor, fits };
   }
@@ -219,7 +217,6 @@
           if (chrome.runtime.lastError) return;
           if (res[GLOBAL_OFF_KEY] || res[excludedKey] || res[pausedKey]) return; // suppressed
           const next = dir === 0 ? 1.0 : stepFrom(resolve(res), dir);
-          chrome.storage.local.remove(autoKey); // manual zoom -> leave auto-fit mode
           if (Math.abs(next - 1.0) < 1e-6) {
             chrome.storage.local.remove(key); // 100% => store nothing
           } else {
@@ -292,40 +289,12 @@
     /* ignore */
   }
 
-  // Auto-fit re-fit: a site that reshapes while loading would fit wrong if
-  // measured too early, so auto-fit sites re-measure once the page has settled
-  // (after load) and on resize. Manual zooms are never re-fit. Debounced.
-  let refitTimer = null;
-  function scheduleRefit() {
-    if (refitTimer) clearTimeout(refitTimer);
-    // Read the flags when the timer fires, not now: on a fast-loading page `load`
-    // can beat the initial async storage read, so the cached autoMode may be
-    // stale here. Storage is authoritative at fire time.
-    refitTimer = setTimeout(() => {
-      try {
-        chrome.storage.local.get(
-          [GLOBAL_OFF_KEY, excludedKey, pausedKey, autoKey],
-          (res) => {
-            if (chrome.runtime.lastError) return;
-            if (
-              res[autoKey] &&
-              !res[GLOBAL_OFF_KEY] &&
-              !res[excludedKey] &&
-              !res[pausedKey]
-            )
-              autofit().catch(() => {});
-        });
-      } catch (e) {
-        /* ignore */
-      }
-    }, 400);
-  }
+  // After the load churn, re-assert the fixed factor (a heavy page can clobber the
+  // inline zoom during load). We deliberately do NOT re-measure here: Fit width is a
+  // one-shot, so a fitted level stays put across loads instead of bouncing as each
+  // page measures slightly differently.
   try {
-    window.addEventListener("load", () => {
-      refresh(); // re-assert after the load churn
-      scheduleRefit();
-    });
-    window.addEventListener("resize", scheduleRefit);
+    window.addEventListener("load", () => refresh());
   } catch (e) {
     /* ignore */
   }

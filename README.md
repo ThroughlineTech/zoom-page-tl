@@ -20,9 +20,10 @@ zoom only. See `HANDOFF.md` for the full design rationale and the engineering br
   remembered per hostname.
 - "Fit width" in the popup AutoFits the zoom to the window: it shrinks a page that is
   too wide, or enlarges a site whose content sits in a narrow centered column (filling
-  the empty side margins). If the page already spans the window it says so. Fit width is
-  a mode: it stays on (button highlighted) and re-fits each time the page loads, so sites
-  that reshape while loading settle correctly. Set any manual level to turn it off.
+  the empty side margins). If the page already spans the window it says so. It is a
+  one-shot: it sets a fixed zoom for the site, which then stays put on every page (no
+  re-fitting or bouncing). Click "Fit width" again to re-measure - for example on a
+  different page layout, or a site that was still loading the first time.
 - Keyboard: `Ctrl +` zoom in, `Ctrl -` zoom out, `Ctrl 0` reset (the familiar zoom
   keys keep working - they drive this extension's per-site zoom, with no zoom bubble).
   `Alt+Shift+Up / Down / 0` do the same and are rebindable at

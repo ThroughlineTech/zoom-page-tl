@@ -50,7 +50,6 @@ async function setDefault(factor) {
 async function setSite(host, factor) {
   if (!host) return;
   const key = hostKey(host);
-  await chrome.storage.local.remove("af:" + host); // manual level -> leave auto-fit mode
   const f = clampFactor(factor);
   if (f == null || isOne(f)) {
     await chrome.storage.local.remove(key);
@@ -84,14 +83,9 @@ async function setPaused(host, paused) {
   }
 }
 
-// Forget a site entirely: drop its level, exclude/pause flags, and auto-fit mode.
+// Forget a site entirely: drop its level and its exclude/pause flags.
 async function removeSite(host) {
-  await chrome.storage.local.remove([
-    hostKey(host),
-    "x:" + host,
-    "p:" + host,
-    "af:" + host,
-  ]);
+  await chrome.storage.local.remove([hostKey(host), "x:" + host, "p:" + host]);
 }
 
 // Every customized site, with its state. factor is the stored level or null;

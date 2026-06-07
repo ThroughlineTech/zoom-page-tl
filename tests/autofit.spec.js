@@ -21,6 +21,10 @@ async function runAutofit(sw, tabId) {
   );
 }
 
+function htmlZoom(page) {
+  return page.evaluate(() => document.documentElement.style.zoom);
+}
+
 test.beforeEach(async ({ serviceWorker }) => {
   await serviceWorker.evaluate(() => chrome.storage.local.clear());
 });
@@ -129,4 +133,30 @@ test("AutoFit clamps an extremely wide page to the minimum factor", async ({
   const resp = await runAutofit(serviceWorker, tabId);
 
   expect(resp.factor).toBe(0.25);
+});
+
+test("a fitted level is fixed: the page does not re-fit on load", async ({
+  page,
+  serviceWorker,
+}) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  // A stored level that is NOT what AutoFit would compute for /narrow (~1.67),
+  // plus a leftover legacy af: flag. Fit width is one-shot now, so neither must
+  // trigger a re-fit on load - the level stays put (no bouncing).
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({ "z:localhost": 1.2, "af:localhost": true })
+  );
+  await page.goto("/narrow");
+
+  // The fixed 1.2 applies at document_start...
+  await expect.poll(() => htmlZoom(page)).toBe("1.2");
+  // ...and is still 1.2 well past the old 400ms re-fit debounce window.
+  await page.waitForLoadState("load");
+  await page.waitForTimeout(700);
+  expect(await htmlZoom(page)).toBe("1.2");
+  expect(
+    await serviceWorker.evaluate(() =>
+      chrome.storage.local.get("z:localhost").then((r) => r["z:localhost"])
+    )
+  ).toBe(1.2);
 });

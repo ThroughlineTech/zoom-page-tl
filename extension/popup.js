@@ -8,7 +8,6 @@ let currentFactor = 1.0;
 let currentGlobalOff = false; // cfg:off - master switch, off on every site
 let currentExcluded = false; // x:<host> - never zoom this site
 let currentPaused = false; // p:<host> - zoom suspended for now (resume later)
-let currentAuto = false; // auto-fit mode: re-fits on load (see content.js)
 
 const $host = document.getElementById("host");
 const $pct = document.getElementById("pct");
@@ -53,17 +52,10 @@ function render() {
   for (const id of ["in", "out", "fit", "reset"]) {
     document.getElementById(id).disabled = suppressed;
   }
-  // Highlight "Fit width" while auto-fit mode is on (it re-fits on each load).
-  document
-    .getElementById("fit")
-    .classList.toggle("on", currentAuto && !suppressed);
 }
 
 async function persist() {
   const key = hostKey(currentHost);
-  // A manual zoom leaves auto-fit mode (the user picked a level; don't re-fit).
-  currentAuto = false;
-  await chrome.storage.local.remove("af:" + currentHost);
   if (Math.abs(currentFactor - 1.0) < 1e-6) {
     await chrome.storage.local.remove(key);
   } else {
@@ -162,14 +154,11 @@ function showNote(msg) {
   }, 1800);
 }
 
-// AutoFit runs in the content script (it needs a live measurement). It writes
-// storage itself, so we just reflect the returned factor in the popup UI.
+// Fit width is a ONE-SHOT: the content script measures once and writes the result
+// as a fixed level (it never re-fits on later loads). We reflect the returned
+// factor in the popup UI.
 document.getElementById("fit").addEventListener("click", async () => {
   if (!currentTab || !currentHost) return;
-  // Entering auto-fit mode: re-fits on each load (see content.js). Set the flag
-  // before measuring so the content script sees it.
-  currentAuto = true;
-  await chrome.storage.local.set({ ["af:" + currentHost]: true });
   try {
     const resp = await chrome.tabs.sendMessage(currentTab.id, {
       type: "autofit",
@@ -209,12 +198,7 @@ document.getElementById("options").addEventListener("click", () => {
   }
   const keys = ["cfg:off"]; // the master switch is host-independent
   if (currentHost) {
-    keys.push(
-      hostKey(currentHost),
-      "x:" + currentHost,
-      "p:" + currentHost,
-      "af:" + currentHost
-    );
+    keys.push(hostKey(currentHost), "x:" + currentHost, "p:" + currentHost);
   }
   const res = await chrome.storage.local.get(keys);
   currentGlobalOff = !!res["cfg:off"];
@@ -222,7 +206,6 @@ document.getElementById("options").addEventListener("click", () => {
     currentFactor = res[hostKey(currentHost)] || 1.0;
     currentExcluded = !!res["x:" + currentHost];
     currentPaused = !!res["p:" + currentHost];
-    currentAuto = !!res["af:" + currentHost];
   }
   render();
 })();

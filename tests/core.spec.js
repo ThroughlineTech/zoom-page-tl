@@ -119,6 +119,29 @@ test("reset removes the key and restores 100%", async ({
   expect(stored["z:localhost"]).toBeUndefined();
 });
 
+test("re-applies the zoom if the page clobbers it", async ({
+  page,
+  serviceWorker,
+}) => {
+  await serviceWorker.evaluate(() =>
+    chrome.storage.local.set({ "z:localhost": 1.5 })
+  );
+  await page.goto("/");
+  expect(Math.round(await markerWidth(page))).toBe(150);
+
+  // Simulate a re-render that wipes our inline zoom (e.g. a heavy SPA site).
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "";
+  });
+
+  // The MutationObserver re-asserts the FIXED factor (this is re-assert, not
+  // re-measure - the level never changes).
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.style.zoom))
+    .toBe("1.5");
+  expect(Math.round(await markerWidth(page))).toBe(150);
+});
+
 test("stepFrom (service worker) walks the zoom ladder correctly", async ({
   serviceWorker,
 }) => {

@@ -415,7 +415,7 @@ test("options UI pauses an active site (stays Active, tagged) and resumes", asyn
   ).not.toBeDisabled();
 });
 
-test("removeSite clears the level, exclude, pause, and auto-fit keys together", async ({
+test("removeSite clears the level, exclude, and pause keys together", async ({
   page,
   extensionId,
   serviceWorker,
@@ -425,7 +425,6 @@ test("removeSite clears the level, exclude, pause, and auto-fit keys together", 
       "z:gone.example.com": 1.5,
       "x:gone.example.com": true,
       "p:gone.example.com": true,
-      "af:gone.example.com": true,
     })
   );
   await openOptions(page, extensionId);
@@ -437,7 +436,6 @@ test("removeSite clears the level, exclude, pause, and auto-fit keys together", 
   expect(stored["z:gone.example.com"]).toBeUndefined();
   expect(stored["x:gone.example.com"]).toBeUndefined();
   expect(stored["p:gone.example.com"]).toBeUndefined();
-  expect(stored["af:gone.example.com"]).toBeUndefined();
 });
 
 test("default zoom field writes the default and resets it", async ({
