@@ -135,16 +135,17 @@ test("AutoFit clamps an extremely wide page to the minimum factor", async ({
   expect(resp.factor).toBe(0.25);
 });
 
-test("a fitted level is fixed: the page does not re-fit on load", async ({
+test("a fixed level (not Auto) does not re-fit on load", async ({
   page,
   serviceWorker,
 }) => {
   await page.setViewportSize({ width: 1000, height: 800 });
-  // A stored level that is NOT what AutoFit would compute for /narrow (~1.67),
-  // plus a leftover legacy af: flag. Fit width is one-shot now, so neither must
-  // trigger a re-fit on load - the level stays put (no bouncing).
+  // A fixed stored level that is NOT what AutoFit would compute for /narrow
+  // (~1.67) and NO af: flag. A plain fixed level is never re-measured - it stays
+  // put across loads (no bouncing). (Auto mode, which would re-fit, is covered in
+  // auto.spec.js.)
   await serviceWorker.evaluate(() =>
-    chrome.storage.local.set({ "z:localhost": 1.2, "af:localhost": true })
+    chrome.storage.local.set({ "z:localhost": 1.2 })
   );
   await page.goto("/narrow");
 

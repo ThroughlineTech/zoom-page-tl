@@ -19,17 +19,19 @@
   const GLOBAL_OFF_KEY = "cfg:off"; // master switch: when set, off on every site
   const excludedKey = "x:" + host; // when set, this site is excluded (never zoom)
   const pausedKey = "p:" + host; // when set, zoom is paused (temporarily) for this host
+  const autoKey = "af:" + host; // when set, this site is in EXPLICIT auto-fit mode
 
   const MIN = 0.25;
   const MAX = 5.0;
 
   // Cached state, kept current by refresh(): `suppressed` (excluded OR paused)
   // lets the keydown handler decide synchronously whether to let Ctrl +/- through;
+  // `autoMode` (af:<host>, opt-in only) says the site re-fits on load/resize;
   // `desired` is the factor we want on <html>, used to re-assert if the page
-  // clobbers it. Fit width is a ONE-SHOT: it measures once and writes a fixed
-  // factor; the page is never re-measured on load/resize (that bouncing was
-  // jarring), so a fitted level stays put until the user fits again.
+  // clobbers it. Plain "Fit width" is a ONE-SHOT fixed level; Auto mode is the
+  // explicit opt-in that brings back per-load re-fitting for one site.
   let suppressed = false;
+  let autoMode = false;
   let desired = 1.0;
 
   function apply(factor) {
@@ -52,11 +54,12 @@
   function refresh() {
     try {
       chrome.storage.local.get(
-        [key, DEFAULT_KEY, GLOBAL_OFF_KEY, excludedKey, pausedKey],
+        [key, DEFAULT_KEY, GLOBAL_OFF_KEY, excludedKey, pausedKey, autoKey],
         (res) => {
           if (chrome.runtime.lastError) return;
           suppressed =
             !!res[GLOBAL_OFF_KEY] || !!res[excludedKey] || !!res[pausedKey];
+          autoMode = !suppressed && !!res[autoKey];
           // Off globally, or excluded/paused here: leave the page at its natural
           // 100%, ignoring any stored factor and the global default.
           apply(suppressed ? 1.0 : resolve(res));
@@ -82,10 +85,14 @@
         changes[DEFAULT_KEY] ||
         changes[GLOBAL_OFF_KEY] ||
         changes[excludedKey] ||
-        changes[pausedKey]
+        changes[pausedKey] ||
+        changes[autoKey]
       ) {
         refresh();
       }
+      // Auto mode just turned on (e.g. from the options page): fit now, not only
+      // on the next load.
+      if (changes[autoKey] && changes[autoKey].newValue) scheduleRefit();
     });
   } catch (e) {
     /* ignore */
@@ -217,6 +224,7 @@
           if (chrome.runtime.lastError) return;
           if (res[GLOBAL_OFF_KEY] || res[excludedKey] || res[pausedKey]) return; // suppressed
           const next = dir === 0 ? 1.0 : stepFrom(resolve(res), dir);
+          chrome.storage.local.remove(autoKey); // manual zoom -> leave auto mode
           if (Math.abs(next - 1.0) < 1e-6) {
             chrome.storage.local.remove(key); // 100% => store nothing
           } else {
@@ -289,12 +297,41 @@
     /* ignore */
   }
 
-  // After the load churn, re-assert the fixed factor (a heavy page can clobber the
-  // inline zoom during load). We deliberately do NOT re-measure here: Fit width is a
-  // one-shot, so a fitted level stays put across loads instead of bouncing as each
-  // page measures slightly differently.
+  // Auto mode (af:<host>, opt-in only) re-fits once the page settles (after load)
+  // and on resize, so an explicitly-auto site reshapes to fit as it loads. A plain
+  // fixed level is NEVER re-measured here - it just gets re-asserted, so it stays
+  // put across loads instead of bouncing. Debounced.
+  let refitTimer = null;
+  function scheduleRefit() {
+    if (refitTimer) clearTimeout(refitTimer);
+    // Read the flags when the timer fires, not now: on a fast-loading page `load`
+    // can beat the initial async storage read, so cached state may be stale here.
+    refitTimer = setTimeout(() => {
+      try {
+        chrome.storage.local.get(
+          [GLOBAL_OFF_KEY, excludedKey, pausedKey, autoKey],
+          (res) => {
+            if (chrome.runtime.lastError) return;
+            if (
+              res[autoKey] &&
+              !res[GLOBAL_OFF_KEY] &&
+              !res[excludedKey] &&
+              !res[pausedKey]
+            )
+              autofit().catch(() => {});
+          }
+        );
+      } catch (e) {
+        /* ignore */
+      }
+    }, 400);
+  }
   try {
-    window.addEventListener("load", () => refresh());
+    window.addEventListener("load", () => {
+      refresh(); // re-assert the level after the load churn
+      scheduleRefit(); // ...and re-fit if this site is explicitly in auto mode
+    });
+    window.addEventListener("resize", scheduleRefit);
   } catch (e) {
     /* ignore */
   }

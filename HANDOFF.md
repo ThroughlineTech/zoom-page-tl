@@ -161,10 +161,11 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   page clobbers it - a
   MutationObserver on the `<html>` style attribute plus a `document` childList observer
   for wholesale `<html>` replacement (this is what keeps re-rendering sites like cnn.com
-  stable, and it is why a stored zoom survives the load churn). This is re-ASSERT, not
-  re-MEASURE: Fit width is a one-shot that writes a fixed factor, and the page is never
-  re-fit on load or resize (the bouncing-per-page that caused was jarring); after `load`
-  it only re-asserts that fixed factor. Wrapped in try/catch
+  stable, and it is why a stored zoom survives the load churn). This re-ASSERT (not
+  re-measure) is what holds a FIXED level steady: plain "Fit width" is a one-shot, so a
+  fixed level never bounces. Re-MEASURING only happens for sites in explicit Auto mode
+  (`af:<host>`, opt-in): those re-run AutoFit after `load` (debounced) and on resize, and
+  also fit immediately when Auto is turned on. Wrapped in try/catch
   for pages where the extension context is unavailable.
 
 - `extension/background.js`
@@ -201,9 +202,12 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   "Exclude" (never zoom, `x:<host>`) - and an "Options" footer link. A top appbar holds a
   master On/Off power switch (writes `cfg:off`); when off everywhere the whole per-site UI
   dims and the switch reads "Off". Writes per-site
-  factor to storage on change; the content script reflects it live. "Fit width" is a
-  one-shot: it measures once and writes a fixed level (click it again to re-fit). While
-  suppressed it shows "Paused"/"Off", dims the controls, and disables them;
+  factor to storage on change; the content script reflects it live. The action row is
+  "Fit | Auto | Reset": **Fit** is a one-shot (measure once, fixed level), **Auto** toggles
+  explicit auto-fit mode (`af:<host>` - re-fits each load; highlighted while on, and it
+  greys out the manual stepper/presets since the zoom is auto-managed), **Reset** is 100%.
+  Any manual zoom (preset/stepper) leaves Auto. While suppressed it shows "Paused"/"Off",
+  dims the controls, and disables them;
   excluding supersedes a pause (it clears `p:` and disables the Pause toggle).
 
 - `extension/options.html` / `extension/options.js`
@@ -276,14 +280,20 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   setting `x:` clears any `p:`. Absence of both means enabled. Written by the popup's Pause
   / Exclude toggles and the options site manager. (Historically `x:` was a single
   "disable" flag; it is now specifically Exclude, with Pause split out as `p:`.)
-- No auto-fit MODE key. "Fit width" is a one-shot: it measures once and writes the result
-  as the ordinary fixed `z:<host>` level, so every page on the site then renders at that
-  level with no re-fit and no per-page bouncing. To re-fit (e.g. a page with a different
-  layout), click "Fit width" again. (A persistent `af:<host>` mode that re-fit on every
-  load/resize existed earlier and was REMOVED - the bouncing was jarring; the author wants
-  the percentage fixed per site. `background.js` `onInstalled` drops any leftover `af:`
-  keys.) The re-assert observers in content.js still keep that fixed level applied against
-  sites that clobber the inline zoom; that is re-assert, not re-measure.
+- Fit vs Auto. Plain "Fit" is a one-shot: it measures once and writes the result as the
+  ordinary fixed `z:<host>` level, so every page renders at that level with no re-fit and
+  no bouncing (the default; the author wants levels fixed per site). `af:<hostname>` =
+  `true` is the EXPLICIT, opt-in Auto mode (the popup "Auto" toggle / the options Auto
+  button): a site in Auto re-runs AutoFit on every `load` (debounced) and resize, and fits
+  immediately when toggled on, so it reshapes to fit as the page loads. `z:<host>` holds
+  the current fit (applied at document_start). ANY manual zoom (preset/stepper/Ctrl +/-/0,
+  the commands, an options level edit) or a one-shot "Fit" clears `af:`, locking the level.
+  Auto and the manual numbers are mutually exclusive in the UI: while Auto is on the popup
+  stepper/presets grey out and the options level field is disabled. (History: `af:` was the
+  always-on behavior of the old "Fit width is a mode"; that was removed for being jarring,
+  then re-added as this explicit opt-in.) The re-assert observers still hold whatever level
+  is current applied against sites that clobber the inline zoom (re-assert, not re-measure).
+  Auto is NOT in JSON export/import yet (a possible follow-up, like Exclude is).
 
 Keying is by `location.hostname`. This matches ZPWE's "treat domain and subdomains as
 separate sites" behavior: `x.com`, `www.x.com`, and `sub.x.com` are independent, and
@@ -334,14 +344,16 @@ remain open.
    (shrink, fill, breakout-ignore, clamp, fluid no-op) with `/wide`, `/narrow`, `/messy`
    fixtures. NOTE: real-world pages are messy (ads, breakouts, layouts that shift as
    content loads), so AutoFit is best-effort and the exact factor can vary by load; the
-   clamps and the "fits" fallback bound the worst case. ONE-SHOT (revised): "Fit width" was
-   briefly a persistent per-site mode (`af:<host>`) that re-fit on every `load`/resize, but
-   that made the zoom bounce as each page measured differently - jarring. It is now a
-   one-shot: it measures once and writes a fixed `z:<host>` level; pages never re-fit, and
-   you click "Fit width" again to re-measure (e.g. a still-settling site, or a different
-   layout). The `af:` mode and its re-fit/resize logic were removed (a one-time
-   `onInstalled` migration drops leftover `af:` keys). The fixed-level no-re-fit guarantee
-   is covered by `tests/autofit.spec.js`; the re-assert by `tests/core.spec.js`.
+   clamps and the "fits" fallback bound the worst case. FIT vs AUTO (current): the popup
+   action row is "Fit | Auto | Reset". **Fit** is a one-shot - measure once, write a fixed
+   `z:<host>` level, never re-fit (the default; fixed levels do not bounce). **Auto** is the
+   explicit opt-in mode (`af:<host>`): a site in Auto re-fits on every `load`/resize and on
+   toggle-on, and while it is on the manual numbers (popup stepper/presets, options level
+   field) grey out. Any manual zoom or a one-shot Fit clears `af:`. (History: `af:` was the
+   always-on behavior of the earlier "Fit width is a mode"; removed for being jarring, then
+   re-added as this explicit toggle.) Covered by `tests/autofit.spec.js` (one-shot fixed,
+   no-re-fit), `tests/auto.spec.js` (Auto re-fit + toggle), `tests/options.spec.js` (Auto
+   toggle UI); re-assert by `tests/core.spec.js`.
 2. eTLD+1 keying option [M]. OPEN. Optionally collapse subdomains to the registrable
    domain. Requires a public-suffix list (bundle a static copy of the PSL; do not
    fetch at runtime, MV3 forbids remote code). Make it a toggle in the options page,

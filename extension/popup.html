@@ -159,6 +159,10 @@
   body.off .stepper,
   body.off .presets,
   body.off .actions { opacity: 0.4; }
+  /* Auto mode on: the zoom is auto-managed, so dim the manual numbers (the
+     Fit/Auto/Reset buttons stay usable). */
+  body.auto .stepper,
+  body.auto .presets { opacity: 0.4; }
   /* Off everywhere (master switch): dim the whole per-site UI, not the appbar. */
   body.globaloff .host,
   body.globaloff .footer { opacity: 0.4; }
@@ -185,8 +189,9 @@
   <div class="presets" id="presets"></div>
 
   <div class="actions">
-    <button id="fit" title="Fit zoom to window width">Fit width</button>
-    <button id="reset">Reset to 100%</button>
+    <button id="fit" title="Fit the zoom to the window width, once">Fit</button>
+    <button id="auto" title="Auto-fit this site on every page load">Auto</button>
+    <button id="reset" title="Reset to 100%">Reset</button>
   </div>
 
   <div class="note" id="note"></div>

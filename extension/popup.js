@@ -8,6 +8,7 @@ let currentFactor = 1.0;
 let currentGlobalOff = false; // cfg:off - master switch, off on every site
 let currentExcluded = false; // x:<host> - never zoom this site
 let currentPaused = false; // p:<host> - zoom suspended for now (resume later)
+let currentAuto = false; // af:<host> - explicit auto-fit mode (re-fits each load)
 
 const $host = document.getElementById("host");
 const $pct = document.getElementById("pct");
@@ -16,6 +17,7 @@ const $power = document.getElementById("power");
 const $powerLabel = document.getElementById("powerLabel");
 const $pause = document.getElementById("pause");
 const $exclude = document.getElementById("exclude");
+const $auto = document.getElementById("auto");
 
 function pctText(f) {
   return Math.round(f * 100) + "%";
@@ -26,6 +28,9 @@ function render() {
   // 100% and the zoom controls are inert. The master switch dominates: when off
   // everywhere, the per-site toggles are moot (disabled).
   const suppressed = currentGlobalOff || currentExcluded || currentPaused;
+  // In auto mode the zoom is auto-managed, so the MANUAL numbers (stepper +
+  // presets) are inert too - but Fit/Auto/Reset stay usable.
+  const manualOff = suppressed || currentAuto;
   $host.textContent = currentHost || "(no site)";
   $pct.textContent =
     currentGlobalOff || currentExcluded
@@ -35,6 +40,7 @@ function render() {
       : pctText(currentFactor);
   document.body.classList.toggle("off", suppressed);
   document.body.classList.toggle("globaloff", currentGlobalOff);
+  document.body.classList.toggle("auto", currentAuto && !suppressed);
   // Master switch: checked = on.
   $power.checked = !currentGlobalOff;
   $powerLabel.textContent = currentGlobalOff ? "Off" : "On";
@@ -43,19 +49,26 @@ function render() {
   $pause.disabled = currentGlobalOff || currentExcluded;
   $exclude.checked = currentExcluded;
   $exclude.disabled = currentGlobalOff;
-  // Mark the matching preset, and make the zoom controls inert while suppressed.
+  // Highlight the matching preset only when a manual fixed level is in effect.
   [...$presets.children].forEach((btn) => {
     const v = parseFloat(btn.dataset.v);
-    btn.classList.toggle("on", !suppressed && Math.abs(v - currentFactor) < 1e-6);
-    btn.disabled = suppressed;
+    btn.classList.toggle("on", !manualOff && Math.abs(v - currentFactor) < 1e-6);
+    btn.disabled = manualOff;
   });
-  for (const id of ["in", "out", "fit", "reset"]) {
+  document.getElementById("in").disabled = manualOff;
+  document.getElementById("out").disabled = manualOff;
+  for (const id of ["fit", "auto", "reset"]) {
     document.getElementById(id).disabled = suppressed;
   }
+  // Highlight "Auto" while auto mode is on.
+  $auto.classList.toggle("on", currentAuto && !suppressed);
 }
 
 async function persist() {
   const key = hostKey(currentHost);
+  // A manually chosen level is fixed: leave auto mode.
+  currentAuto = false;
+  await chrome.storage.local.remove("af:" + currentHost);
   if (Math.abs(currentFactor - 1.0) < 1e-6) {
     await chrome.storage.local.remove(key);
   } else {
@@ -154,15 +167,11 @@ function showNote(msg) {
   }, 1800);
 }
 
-// Fit width is a ONE-SHOT: the content script measures once and writes the result
-// as a fixed level (it never re-fits on later loads). We reflect the returned
-// factor in the popup UI.
-document.getElementById("fit").addEventListener("click", async () => {
-  if (!currentTab || !currentHost) return;
+// Measure-and-apply: the content script does the AutoFit (it needs a live
+// measurement) and writes the resulting factor to storage; we just reflect it.
+async function runFit() {
   try {
-    const resp = await chrome.tabs.sendMessage(currentTab.id, {
-      type: "autofit",
-    });
+    const resp = await chrome.tabs.sendMessage(currentTab.id, { type: "autofit" });
     if (resp && typeof resp.factor === "number") {
       currentFactor = resp.factor;
       const text =
@@ -170,15 +179,34 @@ document.getElementById("fit").addEventListener("click", async () => {
           ? ""
           : String(Math.round(currentFactor * 100));
       chrome.action.setBadgeText({ tabId: currentTab.id, text });
-      render();
       // Nothing to fit (already spans the window): say so, since the percent
       // not moving would otherwise look like a dead button.
       if (resp.fits) showNote("Already fits the width");
-    } else {
-      render();
     }
   } catch (e) {
     /* no content script on restricted pages */
+  }
+  render();
+}
+
+// "Fit" is a ONE-SHOT: measure once, write a fixed level, and leave auto mode.
+document.getElementById("fit").addEventListener("click", async () => {
+  if (!currentTab || !currentHost) return;
+  currentAuto = false;
+  await chrome.storage.local.remove("af:" + currentHost);
+  await runFit();
+});
+
+// "Auto" toggles explicit auto-fit mode (af:<host>). On: fit now AND re-fit on
+// every later load/resize (content.js). Off: keep the last fit as a fixed level.
+$auto.addEventListener("click", async () => {
+  if (!currentTab || !currentHost) return;
+  currentAuto = !currentAuto;
+  if (currentAuto) {
+    await chrome.storage.local.set({ ["af:" + currentHost]: true });
+    await runFit();
+  } else {
+    await chrome.storage.local.remove("af:" + currentHost);
     render();
   }
 });
@@ -198,7 +226,12 @@ document.getElementById("options").addEventListener("click", () => {
   }
   const keys = ["cfg:off"]; // the master switch is host-independent
   if (currentHost) {
-    keys.push(hostKey(currentHost), "x:" + currentHost, "p:" + currentHost);
+    keys.push(
+      hostKey(currentHost),
+      "x:" + currentHost,
+      "p:" + currentHost,
+      "af:" + currentHost
+    );
   }
   const res = await chrome.storage.local.get(keys);
   currentGlobalOff = !!res["cfg:off"];
@@ -206,6 +239,7 @@ document.getElementById("options").addEventListener("click", () => {
     currentFactor = res[hostKey(currentHost)] || 1.0;
     currentExcluded = !!res["x:" + currentHost];
     currentPaused = !!res["p:" + currentHost];
+    currentAuto = !!res["af:" + currentHost];
   }
   render();
 })();
