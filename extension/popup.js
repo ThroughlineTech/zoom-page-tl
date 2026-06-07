@@ -5,6 +5,7 @@ const PRESETS = [0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0];
 let currentTab = null;
 let currentHost = "";
 let currentFactor = 1.0;
+let currentGlobalOff = false; // cfg:off - master switch, off on every site
 let currentExcluded = false; // x:<host> - never zoom this site
 let currentPaused = false; // p:<host> - zoom suspended for now (resume later)
 let currentAuto = false; // auto-fit mode: re-fits on load (see content.js)
@@ -12,6 +13,8 @@ let currentAuto = false; // auto-fit mode: re-fits on load (see content.js)
 const $host = document.getElementById("host");
 const $pct = document.getElementById("pct");
 const $presets = document.getElementById("presets");
+const $power = document.getElementById("power");
+const $powerLabel = document.getElementById("powerLabel");
 const $pause = document.getElementById("pause");
 const $exclude = document.getElementById("exclude");
 
@@ -20,20 +23,27 @@ function pctText(f) {
 }
 
 function render() {
-  // Suppressed = excluded or paused: either way the page is held at 100% and the
-  // zoom controls are inert. Excluded is the stronger state (a never-zoom site
-  // has nothing to pause), so its checkbox disables the pause one.
-  const suppressed = currentExcluded || currentPaused;
+  // Suppressed = off everywhere, or excluded/paused here: the page is held at
+  // 100% and the zoom controls are inert. The master switch dominates: when off
+  // everywhere, the per-site toggles are moot (disabled).
+  const suppressed = currentGlobalOff || currentExcluded || currentPaused;
   $host.textContent = currentHost || "(no site)";
-  $pct.textContent = currentExcluded
-    ? "Off"
-    : currentPaused
-    ? "Paused"
-    : pctText(currentFactor);
+  $pct.textContent =
+    currentGlobalOff || currentExcluded
+      ? "Off"
+      : currentPaused
+      ? "Paused"
+      : pctText(currentFactor);
   document.body.classList.toggle("off", suppressed);
+  document.body.classList.toggle("globaloff", currentGlobalOff);
+  // Master switch: checked = on.
+  $power.checked = !currentGlobalOff;
+  $powerLabel.textContent = currentGlobalOff ? "Off" : "On";
+  // Per-site toggles (excluded disables pause; off-everywhere disables both).
   $pause.checked = currentPaused;
-  $pause.disabled = currentExcluded;
+  $pause.disabled = currentGlobalOff || currentExcluded;
   $exclude.checked = currentExcluded;
+  $exclude.disabled = currentGlobalOff;
   // Mark the matching preset, and make the zoom controls inert while suppressed.
   [...$presets.children].forEach((btn) => {
     const v = parseFloat(btn.dataset.v);
@@ -90,6 +100,19 @@ document.getElementById("out").addEventListener("click", () =>
 document.getElementById("reset").addEventListener("click", () =>
   setFactor(1.0)
 );
+
+// Master switch: turn the whole extension on/off. Writes cfg:off; the service
+// worker sweeps every tab (mode + badge) and greys the toolbar icon, and every
+// content script holds its page at 100% while off.
+$power.addEventListener("change", async () => {
+  currentGlobalOff = !$power.checked; // checked = on
+  if (currentGlobalOff) {
+    await chrome.storage.local.set({ "cfg:off": true });
+  } else {
+    await chrome.storage.local.remove("cfg:off");
+  }
+  render();
+});
 
 // Pause (temporary) zoom on this site. Writes p:<host>; content.js suspends the
 // zoom live and the service worker hands native zoom back. The stored level is
@@ -184,13 +207,18 @@ document.getElementById("options").addEventListener("click", () => {
   } catch (e) {
     currentHost = "";
   }
+  const keys = ["cfg:off"]; // the master switch is host-independent
   if (currentHost) {
-    const res = await chrome.storage.local.get([
+    keys.push(
       hostKey(currentHost),
       "x:" + currentHost,
       "p:" + currentHost,
-      "af:" + currentHost,
-    ]);
+      "af:" + currentHost
+    );
+  }
+  const res = await chrome.storage.local.get(keys);
+  currentGlobalOff = !!res["cfg:off"];
+  if (currentHost) {
     currentFactor = res[hostKey(currentHost)] || 1.0;
     currentExcluded = !!res["x:" + currentHost];
     currentPaused = !!res["p:" + currentHost];

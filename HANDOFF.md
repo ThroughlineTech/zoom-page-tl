@@ -133,6 +133,10 @@ Reference: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtension
     because browser zoom is disabled, so the native Ctrl +/-/0 are inert and ours
     are the only effect. (These are not rebindable; they are page-level key handling,
     not extension commands.)
+- `zoom-autofit` and `toggle-global` are defined with NO `suggested_key`, so they do not
+  consume the 4 default-key slots Chrome allows (only 4 commands may carry a
+  `suggested_key`; we use 3 for zoom in/out/reset). Users bind them by hand at
+  `chrome://extensions/shortcuts`. `toggle-global` flips the `cfg:off` master switch.
 
 ## 6. File-by-file walkthrough
 
@@ -141,8 +145,9 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
 - `extension/manifest.json`
   MV3 manifest. Permissions: `storage`, `tabs`. `host_permissions`: `<all_urls>`.
   One `document_start` content-script entry on `<all_urls>`, top frame only, loading
-  `zoom.js` then `content.js`. An action with the popup. Four commands (zoom-in,
-  zoom-out, zoom-reset, zoom-autofit; the last has no default key).
+  `zoom.js` then `content.js`. An action with the popup. Five commands (zoom-in,
+  zoom-out, zoom-reset, zoom-autofit, toggle-global; the last two have no default key,
+  so they do not consume the 4 suggested-key slots Chrome allows).
 
 - `extension/content.js`
   Runs at `document_start`. Reads `z:<hostname>` from `chrome.storage.local` and sets
@@ -171,11 +176,14 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   the factor the same way content.js does (`z:<host>` -> `cfg:defaultZoom` -> 1.0), so
   both the command stepping base and the badge are default-aware: with a non-100% global
   default, "zoom in" steps up from what is on screen and the badge shows that percent.
-  Honors the suppression flags via `isSuppressed` (`x:<host>` excluded OR `p:<host>`
-  paused): on a suppressed site the commands no-op, the badge shows a gray "off", and
-  `applyZoomMode` sets the tab to `"automatic"` (not `"disabled"`) so native browser zoom
-  works. A `storage.onChanged` listener (`syncActiveTab`) re-applies the mode and badge
-  live, so excluding/pausing takes effect without a reload. Contains its
+  Honors the suppression flags via `isSuppressed` (the global switch `cfg:off`, OR
+  `x:<host>` excluded, OR `p:<host>` paused): on a suppressed site the commands no-op, the
+  badge shows a gray "off", and `applyZoomMode` sets the tab to `"automatic"` (not
+  `"disabled"`) so native browser zoom works. A `storage.onChanged` listener re-applies the
+  mode and badge live: a per-site change calls `syncActiveTab` (the active tab only), but a
+  `cfg:off` change calls `syncAllTabs` (every open tab, since the master switch affects them
+  all at once) and swaps the toolbar icon to/from the greyed `icons/off/` set via
+  `applyActionIcon`. The `toggle-global` command flips `cfg:off`. Contains its
   own copy of `ZOOM_STEPS` and `stepFrom` because service workers cannot easily share
   the popup's plain script.
 
@@ -188,7 +196,9 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   The toolbar popup. Native-feeling, light/dark aware. Shows the current hostname and
   percent, a minus/plus stepper, a preset grid, a "Fit width" (AutoFit) button, a
   reset button, two footer toggles - "Pause" (suspend zoom for now, `p:<host>`) and
-  "Exclude" (never zoom, `x:<host>`) - and an "Options" footer link. Writes per-site
+  "Exclude" (never zoom, `x:<host>`) - and an "Options" footer link. A top appbar holds a
+  master On/Off power switch (writes `cfg:off`); when off everywhere the whole per-site UI
+  dims and the switch reads "Off". Writes per-site
   factor to storage on change; the content script reflects it live. "Fit width" enters
   auto-fit mode (`af:<host>`) and stays highlighted while active; any manual zoom clears
   it. While suppressed it shows "Paused"/"Off", dims the controls, and disables them;
@@ -241,7 +251,14 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   level (including 100% when the default differs), set it explicitly in the options
   site manager. content.js resolves a site's factor as `z:<host>` if present, else
   `cfg:defaultZoom`, else 1.0, and re-resolves live when either key changes.
-- Two suppression flags - `x:<hostname>` (excluded: never zoom) and `p:<hostname>`
+- Master switch: `cfg:off` = `true` turns the extension off on EVERY site (a global
+  play/pause). It is the top of the suppression hierarchy: when set, content.js holds
+  every page at 100%, the worker puts every tab in `"automatic"` and shows the "off"
+  badge, and the toolbar icon greys out - regardless of any per-site `z:`/`x:`/`p:`.
+  Per-site state is untouched, so clearing `cfg:off` restores each site exactly. Absent
+  means on. Written by the popup power switch and the `toggle-global` command. Persists
+  (it is a deliberate state), so it survives a restart until toggled back on.
+- Two per-site suppression flags - `x:<hostname>` (excluded: never zoom) and `p:<hostname>`
   (paused: suspended for now). Either set to `true` makes content.js hold the page at its
   natural 100% (ignoring `z:<host>` and the default), the extension's zoom inert, the
   badge "off", and the service worker sets that tab to `setZoomSettings` `"automatic"` -

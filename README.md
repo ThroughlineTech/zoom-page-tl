@@ -26,13 +26,19 @@ zoom only. See `HANDOFF.md` for the full design rationale and the engineering br
 - Keyboard: `Ctrl +` zoom in, `Ctrl -` zoom out, `Ctrl 0` reset (the familiar zoom
   keys keep working - they drive this extension's per-site zoom, with no zoom bubble).
   `Alt+Shift+Up / Down / 0` do the same and are rebindable at
-  `chrome://extensions/shortcuts`; AutoFit has a command there with no default key.
+  `chrome://extensions/shortcuts`; AutoFit and the global on/off both have commands
+  there with no default key (bind them yourself if you want a hotkey).
 - "Pause" and "Exclude" (popup footer) both step the extension aside on the current
   site: it holds the page at 100% and hands zoom back to Chrome, so the normal native
   Ctrl +/- (and its zoom bubble) work again, and the badge shows "off". Pause is
   temporary (suspend for now - say a layout update broke - then resume later); Exclude
   means never zoom this site. Your saved level is kept either way. Use them for sites
   that misbehave under zoom.
+- Master on/off switch (top of the popup) turns the whole extension off on every site
+  at once - a global play/pause. While off, every page sits at 100%, native zoom comes
+  back everywhere, and the toolbar icon greys out; flip it back on and every site returns
+  to exactly its prior zoom. There is also a bindable "toggle on/off everywhere" hotkey
+  at `chrome://extensions/shortcuts`.
 - The toolbar badge shows the current site's zoom percent.
 - "Options" (popup footer, or the extension's options page) lets you set a global
   default zoom for new sites and manage every saved site in two lists: Active (edit its
@@ -59,9 +65,10 @@ zoom-page-tl/
     popup.js
     options.html            options page: default zoom, site manager, import/export
     options.js
-    icons/
+    icons/                  color toolbar icons + icons/off/ (greyed, used while off)
   scripts/
     check.js                Chrome-targeted static check (replaces web-ext lint)
+    make-off-icons.js       one-off: generate the greyed icons/off/ set from the color icons
   tests/
     fixtures.js             Playwright fixture: loads the unpacked extension
     server.js               local static server (real localhost hostname)

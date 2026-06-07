@@ -2,9 +2,9 @@
 // Two jobs:
 //   1) Suppress Chrome's native zoom bubble by disabling browser zoom on every
 //      tab/navigation (setZoomSettings resets to default on each navigation, so
-//      it must be reapplied) - EXCEPT on suppressed sites (excluded x:<host> or
-//      paused p:<host>), where browser zoom is handed back to Chrome
-//      ("automatic") so native Ctrl +/- work.
+//      it must be reapplied) - EXCEPT when suppressed: the global switch (cfg:off)
+//      is off, or the site is excluded (x:<host>) or paused (p:<host>). Then
+//      browser zoom is handed back to Chrome ("automatic") so native Ctrl +/- work.
 //   2) Keep the toolbar badge showing the current site's zoom %, and handle the
 //      keyboard commands.
 
@@ -35,6 +35,20 @@ function hostOf(url) {
 }
 
 const DEFAULT_KEY = "cfg:defaultZoom"; // global default for un-customized sites
+const GLOBAL_OFF_KEY = "cfg:off"; // master switch: when set, off on every site
+
+const COLOR_ICON = {
+  16: "icons/icon16.png",
+  32: "icons/icon32.png",
+  48: "icons/icon48.png",
+  128: "icons/icon128.png",
+};
+const OFF_ICON = {
+  16: "icons/off/icon16.png",
+  32: "icons/off/icon32.png",
+  48: "icons/off/icon48.png",
+  128: "icons/off/icon128.png",
+};
 
 // The factor a site actually renders at, resolved the same way content.js does:
 // its own z:<host> key if set, otherwise the global default, otherwise 100%.
@@ -60,12 +74,27 @@ async function setFactor(host, factor) {
   }
 }
 
-// Excluded (x:, never zoom) or paused (p:, suspended for now): either way the
-// extension steps aside - hold the page at 100% and hand browser zoom back.
+// The extension steps aside (hold the page at 100%, hand browser zoom back) when
+// the global switch is off (cfg:off) OR this site is excluded (x:) or paused (p:).
+async function isGloballyOff() {
+  const res = await chrome.storage.local.get(GLOBAL_OFF_KEY);
+  return !!res[GLOBAL_OFF_KEY];
+}
+
 async function isSuppressed(host) {
-  if (!host) return false;
-  const res = await chrome.storage.local.get(["x:" + host, "p:" + host]);
-  return !!res["x:" + host] || !!res["p:" + host];
+  const keys = [GLOBAL_OFF_KEY];
+  if (host) keys.push("x:" + host, "p:" + host);
+  const res = await chrome.storage.local.get(keys);
+  return (
+    !!res[GLOBAL_OFF_KEY] ||
+    (!!host && (!!res["x:" + host] || !!res["p:" + host]))
+  );
+}
+
+// Grey the toolbar icon while off everywhere, so the state is visible at a
+// glance; restore the color icon when back on.
+function applyActionIcon(off) {
+  chrome.action.setIcon({ path: off ? OFF_ICON : COLOR_ICON }).catch(() => {});
 }
 
 async function applyZoomMode(tabId, host) {
@@ -120,7 +149,14 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 // or the options page. Tab events above cover navigation and activation; this
 // covers in-place edits, so excluding/pausing flips the zoom mode and badge live.
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local") syncActiveTab();
+  if (area !== "local") return;
+  if (changes[GLOBAL_OFF_KEY]) {
+    // The master switch affects every tab at once, plus the toolbar icon.
+    applyActionIcon(!!changes[GLOBAL_OFF_KEY].newValue);
+    syncAllTabs();
+  } else {
+    syncActiveTab();
+  }
 });
 
 async function syncActiveTab() {
@@ -135,8 +171,38 @@ async function syncActiveTab() {
   }
 }
 
+// Apply the zoom mode + badge to every open tab. Used when the global switch
+// flips, since that affects all tabs at once (per-site edits touch one tab).
+async function syncAllTabs() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    await Promise.all(
+      tabs.map((t) => {
+        const host = hostOf(t.url);
+        return Promise.all([
+          applyZoomMode(t.id, host),
+          refreshBadge(t.id, host),
+        ]);
+      })
+    );
+  } catch (e) {
+    /* ignore */
+  }
+}
+
 // Keyboard commands operate on the active tab's site.
 chrome.commands.onCommand.addListener(async (command) => {
+  // Master switch: flip cfg:off. The storage.onChanged handler sweeps every tab
+  // (mode + badge) and swaps the toolbar icon; this command needs no active tab.
+  if (command === "toggle-global") {
+    if (await isGloballyOff()) {
+      await chrome.storage.local.remove(GLOBAL_OFF_KEY);
+    } else {
+      await chrome.storage.local.set({ [GLOBAL_OFF_KEY]: true });
+    }
+    return;
+  }
+
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
   const host = hostOf(tab.url);
@@ -167,3 +233,7 @@ chrome.commands.onCommand.addListener(async (command) => {
   await setFactor(host, next);
   refreshBadge(tab.id, host);
 });
+
+// On service-worker wake, reflect the persisted global switch on the toolbar icon
+// (default_icon is the color one, so re-grey if we are off).
+isGloballyOff().then(applyActionIcon);

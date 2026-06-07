@@ -134,6 +134,11 @@ for (const s of sizes) {
   }
 }
 
+// --- off-state icons (referenced by background.js setIcon, not the manifest) ---
+for (const s of sizes) {
+  checkPng(`icons/off/icon${s}.png`, s);
+}
+
 // --- report ---
 if (errors.length) {
   console.error("FAIL: extension static check\n");

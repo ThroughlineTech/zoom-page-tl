@@ -51,6 +51,9 @@
     },
     "zoom-autofit": {
       "description": "AutoFit zoom to window width (this site)"
+    },
+    "toggle-global": {
+      "description": "Turn Zoom Page TL on/off everywhere"
     }
   }
 }

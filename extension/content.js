@@ -16,6 +16,7 @@
   if (!host) return; // about:, data:, etc.
   const key = "z:" + host;
   const DEFAULT_KEY = "cfg:defaultZoom"; // global default for un-customized sites
+  const GLOBAL_OFF_KEY = "cfg:off"; // master switch: when set, off on every site
   const excludedKey = "x:" + host; // when set, this site is excluded (never zoom)
   const pausedKey = "p:" + host; // when set, zoom is paused (temporarily) for this host
   const autoKey = "af:" + host; // when set, this site is in auto-fit mode
@@ -51,13 +52,14 @@
   function refresh() {
     try {
       chrome.storage.local.get(
-        [key, DEFAULT_KEY, excludedKey, pausedKey, autoKey],
+        [key, DEFAULT_KEY, GLOBAL_OFF_KEY, excludedKey, pausedKey, autoKey],
         (res) => {
           if (chrome.runtime.lastError) return;
-          suppressed = !!res[excludedKey] || !!res[pausedKey];
+          suppressed =
+            !!res[GLOBAL_OFF_KEY] || !!res[excludedKey] || !!res[pausedKey];
           autoMode = !suppressed && !!res[autoKey];
-          // Excluded or paused on this site: leave the page at its natural 100%,
-          // ignoring any stored factor and the global default.
+          // Off globally, or excluded/paused here: leave the page at its natural
+          // 100%, ignoring any stored factor and the global default.
           apply(suppressed ? 1.0 : resolve(res));
         }
       );
@@ -79,6 +81,7 @@
       if (
         changes[key] ||
         changes[DEFAULT_KEY] ||
+        changes[GLOBAL_OFF_KEY] ||
         changes[excludedKey] ||
         changes[pausedKey] ||
         changes[autoKey]
@@ -170,8 +173,13 @@
   }
 
   async function autofit() {
-    const st = await chrome.storage.local.get([excludedKey, pausedKey]);
-    if (st[excludedKey] || st[pausedKey]) return { factor: 1, fits: true }; // suppressed; do nothing
+    const st = await chrome.storage.local.get([
+      GLOBAL_OFF_KEY,
+      excludedKey,
+      pausedKey,
+    ]);
+    if (st[GLOBAL_OFF_KEY] || st[excludedKey] || st[pausedKey])
+      return { factor: 1, fits: true }; // suppressed; do nothing
     const { factor, fits } = computeAutofitFactor();
     apply(factor);
     if (Math.abs(factor - 1.0) < 1e-6) {
@@ -205,17 +213,20 @@
   // resolves the global default correctly when a reset removes the key.
   function stepZoom(dir) {
     try {
-      chrome.storage.local.get([key, DEFAULT_KEY, excludedKey, pausedKey], (res) => {
-        if (chrome.runtime.lastError) return;
-        if (res[excludedKey] || res[pausedKey]) return; // suppressed; the keys do nothing
-        const next = dir === 0 ? 1.0 : stepFrom(resolve(res), dir);
-        chrome.storage.local.remove(autoKey); // manual zoom -> leave auto-fit mode
-        if (Math.abs(next - 1.0) < 1e-6) {
-          chrome.storage.local.remove(key); // 100% => store nothing
-        } else {
-          chrome.storage.local.set({ [key]: next });
+      chrome.storage.local.get(
+        [key, DEFAULT_KEY, GLOBAL_OFF_KEY, excludedKey, pausedKey],
+        (res) => {
+          if (chrome.runtime.lastError) return;
+          if (res[GLOBAL_OFF_KEY] || res[excludedKey] || res[pausedKey]) return; // suppressed
+          const next = dir === 0 ? 1.0 : stepFrom(resolve(res), dir);
+          chrome.storage.local.remove(autoKey); // manual zoom -> leave auto-fit mode
+          if (Math.abs(next - 1.0) < 1e-6) {
+            chrome.storage.local.remove(key); // 100% => store nothing
+          } else {
+            chrome.storage.local.set({ [key]: next });
+          }
         }
-      });
+      );
     } catch (e) {
       /* extension context unavailable on some restricted pages */
     }
@@ -292,10 +303,17 @@
     // stale here. Storage is authoritative at fire time.
     refitTimer = setTimeout(() => {
       try {
-        chrome.storage.local.get([excludedKey, pausedKey, autoKey], (res) => {
-          if (chrome.runtime.lastError) return;
-          if (res[autoKey] && !res[excludedKey] && !res[pausedKey])
-            autofit().catch(() => {});
+        chrome.storage.local.get(
+          [GLOBAL_OFF_KEY, excludedKey, pausedKey, autoKey],
+          (res) => {
+            if (chrome.runtime.lastError) return;
+            if (
+              res[autoKey] &&
+              !res[GLOBAL_OFF_KEY] &&
+              !res[excludedKey] &&
+              !res[pausedKey]
+            )
+              autofit().catch(() => {});
         });
       } catch (e) {
         /* ignore */

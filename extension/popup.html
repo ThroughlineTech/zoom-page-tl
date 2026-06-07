@@ -138,15 +138,42 @@
     cursor: pointer;
   }
   .toggle input { margin: 0; cursor: pointer; }
+  .appbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .appname { font-size: 12px; font-weight: 600; }
+  .power {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .power input { margin: 0; cursor: pointer; }
   /* Suppressed (excluded or paused): dim the (now inert) zoom controls. */
   body.off .stepper,
   body.off .presets,
   body.off .actions { opacity: 0.4; }
+  /* Off everywhere (master switch): dim the whole per-site UI, not the appbar. */
+  body.globaloff .host,
+  body.globaloff .footer { opacity: 0.4; }
   button:disabled { cursor: default; }
   button:disabled:hover { background: var(--btn); }
 </style>
 </head>
 <body>
+  <div class="appbar">
+    <span class="appname">Zoom Page TL</span>
+    <label class="power" title="Turn Zoom Page TL on or off everywhere">
+      <input type="checkbox" id="power" checked /><span id="powerLabel">On</span>
+    </label>
+  </div>
+
   <div class="host" id="host">…</div>
 
   <div class="stepper">
