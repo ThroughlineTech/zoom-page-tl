@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Zoom Page TL",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Per-site full-page zoom via CSS, with no browser zoom bubble. Independent replacement for Zoom Page WE (full mode only).",
   "permissions": ["storage", "tabs"],
   "host_permissions": ["<all_urls>"],

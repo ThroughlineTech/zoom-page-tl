@@ -1,6 +1,6 @@
 {
   "name": "zoom-page-tl",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Zoom Page TL - per-site full-page zoom Chrome extension (MV3) with no native zoom bubble.",
   "private": true,
   "license": "MIT",
