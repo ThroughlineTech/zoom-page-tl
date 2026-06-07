@@ -165,7 +165,13 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   re-measure) is what holds a FIXED level steady: plain "Fit width" is a one-shot, so a
   fixed level never bounces. Re-MEASURING only happens for sites in explicit Auto mode
   (`af:<host>`, opt-in): those re-run AutoFit after `load` (debounced) and on resize, and
-  also fit immediately when Auto is turned on. Wrapped in try/catch
+  also fit immediately when Auto is turned on. Also answers two runtime messages: the
+  one-shot `autofit` (measure + persist, see below) and `previewZoom` - an EPHEMERAL
+  live preview used while the popup's zoom slider is being dragged: it `apply()`s the
+  factor to `<html>` WITHOUT writing storage (no write churn, no badge/tab fan-out), so
+  the page reflows in real time as you drag; the popup commits once to storage on
+  release. Because `apply()` updates `desired`, the re-assert observer holds the preview
+  steady instead of reverting it. Ignored while suppressed. Wrapped in try/catch
   for pages where the extension context is unavailable.
 
 - `extension/background.js`
@@ -191,14 +197,23 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   the popup's plain script.
 
 - `extension/zoom.js`
-  Shared helpers: `ZOOM_STEPS`, `hostKey`, `stepFrom`. Loaded as a plain script before
-  `popup.js`, and as the first content script before `content.js` (so the Ctrl +/- keys
-  can use `stepFrom`). (Background duplicates these two functions intentionally.)
+  Shared helpers. The keyboard ladder: `ZOOM_STEPS`, `hostKey`, `stepFrom`. The popup
+  zoom slider: `posToFactor` / `factorToPos` (a LOGARITHMIC position<->factor map over
+  the settable extents, so equal travel == equal ratio), `snapFactor` (soft magnetic
+  snap to the nearest `ZOOM_DETENTS` value within a small position-space well, else the
+  raw factor - so you can slide past), and `clampToExtents`. Plus the constants
+  `ZOOM_DETENTS`, `ZOOM_MIN_DEFAULT`/`ZOOM_MAX_DEFAULT` (5%/400% slider extents) and
+  `ZOOM_CLAMP_MIN`/`ZOOM_CLAMP_MAX` (5%/500% hard clamp, shared with content.js and
+  options.js). Loaded as a plain script before `popup.js` and `options.js`, and as the
+  first content script before `content.js` (so the Ctrl +/- keys can use `stepFrom`).
+  The slider helpers are pure (no DOM), so `tests/slider.spec.js` drives the math
+  directly. (Background duplicates `ZOOM_STEPS`/`stepFrom` intentionally.)
 
 - `extension/popup.html` / `extension/popup.js`
   The toolbar popup. Native-feeling, light/dark aware. Shows the current hostname and
-  percent, a minus/plus stepper, a preset grid, a "Fit width" (AutoFit) button, a
-  reset button, two footer toggles - "Pause" (suspend zoom for now, `p:<host>`) and
+  percent, a live zoom SLIDER, a minus/plus stepper, a preset grid, a "Fit width"
+  (AutoFit) button, a reset button, two footer toggles - "Pause" (suspend zoom for now,
+  `p:<host>`) and
   "Exclude" (never zoom, `x:<host>`) - and an "Options" footer link. A top appbar holds a
   master On/Off power switch (writes `cfg:off`); when off everywhere the whole per-site UI
   dims and the switch reads "Off". Writes per-site
@@ -209,11 +224,25 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   Any manual zoom (preset/stepper) leaves Auto. While suppressed it shows "Paused"/"Off",
   dims the controls, and disables them;
   excluding supersedes a pause (it clears `p:` and disables the Pause toggle).
+  The slider is the live/coarse control: a native `<input type=range>` (0..1000 mapped
+  through the LOG scale over the settable extents), with a tick strip drawn at the
+  detents. On `input` (drag) it sends an ephemeral `previewZoom` to the active tab (no
+  storage write) and soft-snaps the thumb to a detent within the well; on `change`
+  (release) it commits once via the normal persist path. A drag cannot resolve a single
+  percent at a 5-400 range (sub-pixel), so EXACT values come from three fine controls,
+  all of which persist immediately: the percent readout is an editable field (click to
+  type), Arrow keys on the slider nudge +/-1%, and Ctrl/Shift + wheel steps the ladder.
+  The slider extents are read from `cfg:zoomMin`/`cfg:zoomMax` (default 5%/400%) on open.
+  The slider/stepper/presets/percent all grey out and disable while suppressed or in
+  Auto, like the other manual numbers.
 
 - `extension/options.html` / `extension/options.js`
-  The options page (also reachable from the popup footer). Three sections: a global
-  default zoom for un-customized sites (stored under `cfg:defaultZoom`); a site manager
-  split into an **Active** list and an **Excluded** list; and JSON import/export. The
+  The options page (also reachable from the popup footer). Four sections: a global
+  default zoom for un-customized sites (stored under `cfg:defaultZoom`); a **Zoom slider
+  range** (min/max stored under `cfg:zoomMin`/`cfg:zoomMax`, default 5%/400%, clamped to
+  the 5%-500% hard range and rejecting `max <= min`); a site manager split into an
+  **Active** list and an **Excluded** list; and JSON import/export. `getBounds`/
+  `setBounds` are exposed on `window.ZP` for the test suite. The
   manager lists the union of every customized host (`z:` level, `x:` excluded, or `p:`
   paused). Active rows have inline level editing, a Pause/Resume toggle, an Exclude
   button (moves the row to the Excluded list), and Remove; a paused active row shows a
@@ -250,6 +279,15 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
 - Convention: 100% is stored as the absence of a key. Setting a site to 100% deletes
   its key. This keeps storage clean and makes "is this site customized" a simple
   presence check.
+- Reserved keys `cfg:zoomMin` / `cfg:zoomMax` (numbers, factors) are the popup zoom
+  slider's extents. Absent means the defaults (0.05 / 4.0, i.e. 5% / 400%). They are
+  settable in the options page, clamped to the hard range `[ZOOM_CLAMP_MIN,
+  ZOOM_CLAMP_MAX]` = `[0.05, 5.0]` (5%-500%), and stored as the absence of a key when at
+  the default (consistent with the rest of the model). A level set outside the extents
+  (e.g. via import or the options site manager, which allow up to the 500% hard ceiling)
+  still applies; the popup slider and its typed/arrow/wheel controls clamp to the extents.
+  NOTE: the hard factor clamp floor was lowered from 0.25 to 0.05 (in content.js,
+  options.js, and the shared `ZOOM_CLAMP_MIN`) so the slider can reach 5%.
 - Reserved key: `cfg:defaultZoom` (a number) is the global default applied to sites
   that have no `z:` key of their own. Absent means 100%. Consequence of the
   absence-means-100% convention: when the default is not 100%, a site with no key

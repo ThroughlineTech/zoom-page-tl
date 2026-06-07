@@ -21,7 +21,7 @@
   const pausedKey = "p:" + host; // when set, zoom is paused (temporarily) for this host
   const autoKey = "af:" + host; // when set, this site is in EXPLICIT auto-fit mode
 
-  const MIN = 0.25;
+  const MIN = 0.05; // hard floor (matches ZOOM_CLAMP_MIN); the slider can reach 5%
   const MAX = 5.0;
 
   // Cached state, kept current by refresh(): `suppressed` (excluded OR paused)
@@ -203,6 +203,16 @@
           .then((res) => sendResponse(res))
           .catch((e) => sendResponse({ error: String(e) }));
         return true; // keep the channel open for the async response
+      }
+      // Ephemeral live preview while the popup slider is being dragged. Apply the
+      // factor to <html> WITHOUT writing storage (no write churn, no badge/tab
+      // fan-out) - the popup commits once to storage on release. apply() updates
+      // `desired`, so the re-assert observer holds the preview steady instead of
+      // reverting it. Ignored while suppressed (off/excluded/paused).
+      if (msg && msg.type === "previewZoom") {
+        if (!suppressed) apply(msg.factor);
+        sendResponse({ ok: true });
+        return; // synchronous response
       }
     });
   } catch (e) {

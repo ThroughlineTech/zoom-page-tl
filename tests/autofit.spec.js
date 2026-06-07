@@ -125,14 +125,14 @@ test("AutoFit clamps an extremely wide page to the minimum factor", async ({
   page,
   serviceWorker,
 }) => {
-  // 3000px content in a very narrow viewport would want < 0.25; must clamp.
-  await page.setViewportSize({ width: 320, height: 600 });
+  // 3000px content in a 120px viewport wants 0.04, below the 0.05 floor => clamp.
+  await page.setViewportSize({ width: 120, height: 600 });
   await page.goto("/wide");
 
   const tabId = await tabIdFor(serviceWorker, "localhost");
   const resp = await runAutofit(serviceWorker, tabId);
 
-  expect(resp.factor).toBe(0.25);
+  expect(resp.factor).toBe(0.05);
 });
 
 test("a fixed level (not Auto) does not re-fit on load", async ({

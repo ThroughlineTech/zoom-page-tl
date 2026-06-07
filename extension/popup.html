@@ -57,6 +57,80 @@
     font-weight: 600;
     letter-spacing: -0.01em;
   }
+  /* The percent doubles as an exact-entry field: click to type a value. */
+  input.pct {
+    font-family: inherit;
+    border: none;
+    background: transparent;
+    color: var(--fg);
+    padding: 2px 0;
+    width: 0;
+    min-width: 0;
+    border-radius: 6px;
+  }
+  input.pct:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+  input.pct:disabled { color: var(--muted); }
+  /* Live zoom slider. Log-scaled track; soft detents at the normal numbers. */
+  .slider { padding: 12px 12px 2px; }
+  .track { position: relative; padding-bottom: 16px; }
+  #slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 16px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  #slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--line);
+  }
+  #slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5px; /* center the thumb on the 4px track */
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+  }
+  #slider:focus-visible { outline: none; }
+  #slider:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  #slider:disabled { cursor: default; }
+  #slider:disabled::-webkit-slider-thumb { background: var(--muted); }
+  /* Tick strip, inset by the thumb radius so ticks line up with thumb centers. */
+  .ticks {
+    position: absolute;
+    left: 7px;
+    right: 7px;
+    top: 15px;
+    height: 16px;
+    pointer-events: none;
+  }
+  .tick {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 5px;
+    background: var(--line);
+    transform: translateX(-0.5px);
+  }
+  .tick.major { height: 7px; background: var(--muted); }
+  .ticklbl {
+    position: absolute;
+    top: 7px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
   button {
     font: inherit;
     color: var(--fg);
@@ -156,11 +230,13 @@
   }
   .power input { margin: 0; cursor: pointer; }
   /* Suppressed (excluded or paused): dim the (now inert) zoom controls. */
+  body.off .slider,
   body.off .stepper,
   body.off .presets,
   body.off .actions { opacity: 0.4; }
   /* Auto mode on: the zoom is auto-managed, so dim the manual numbers (the
      Fit/Auto/Reset buttons stay usable). */
+  body.auto .slider,
   body.auto .stepper,
   body.auto .presets { opacity: 0.4; }
   /* Off everywhere (master switch): dim the whole per-site UI, not the appbar. */
@@ -180,9 +256,30 @@
 
   <div class="host" id="host">…</div>
 
+  <div class="slider">
+    <div class="track">
+      <input
+        type="range"
+        id="slider"
+        min="0"
+        max="1000"
+        step="1"
+        title="Drag to zoom live. Arrows: +/-1%. Ctrl/Shift+wheel: step."
+      />
+      <div class="ticks" id="ticks"></div>
+    </div>
+  </div>
+
   <div class="stepper">
     <button class="rnd" id="out" title="Zoom out">&minus;</button>
-    <div class="pct" id="pct">100%</div>
+    <input
+      class="pct"
+      id="pct"
+      type="text"
+      inputmode="numeric"
+      value="100%"
+      title="Click to type an exact zoom %"
+    />
     <button class="rnd" id="in" title="Zoom in">+</button>
   </div>
 

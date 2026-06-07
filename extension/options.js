@@ -5,10 +5,14 @@
 // can exercise them deterministically without driving a file dialog.
 
 const DEFAULT_KEY = "cfg:defaultZoom";
-const MIN = 0.25;
-const MAX = 5.0;
+// Hard clamp for any stored factor; shared with content.js and the popup slider
+// (ZOOM_CLAMP_* come from zoom.js, loaded first). 5% floor, 500% ceiling.
+const MIN = ZOOM_CLAMP_MIN;
+const MAX = ZOOM_CLAMP_MAX;
 
 const $default = document.getElementById("default");
+const $zoomMin = document.getElementById("zoomMin");
+const $zoomMax = document.getElementById("zoomMax");
 const $active = document.getElementById("active");
 const $excluded = document.getElementById("excluded");
 const $activeEmpty = document.getElementById("activeEmpty");
@@ -45,6 +49,40 @@ async function setDefault(factor) {
   } else {
     await chrome.storage.local.set({ [DEFAULT_KEY]: f });
   }
+}
+
+// Slider extents (cfg:zoomMin / cfg:zoomMax). A value at the default is stored as
+// the absence of its key (consistent with the rest of the model). Reads fall back
+// to the defaults and guard against incoherent (max <= min) extents.
+async function getBounds() {
+  const res = await chrome.storage.local.get(["cfg:zoomMin", "cfg:zoomMax"]);
+  let min = clampFactor(res["cfg:zoomMin"]);
+  let max = clampFactor(res["cfg:zoomMax"]);
+  if (min == null) min = ZOOM_MIN_DEFAULT;
+  if (max == null) max = ZOOM_MAX_DEFAULT;
+  if (max <= min) {
+    min = ZOOM_MIN_DEFAULT;
+    max = ZOOM_MAX_DEFAULT;
+  }
+  return { min, max };
+}
+
+// Write both extents. Returns false (and writes nothing) if invalid or max<=min.
+async function setBounds(min, max) {
+  const lo = clampFactor(min);
+  const hi = clampFactor(max);
+  if (lo == null || hi == null || hi <= lo) return false;
+  if (Math.abs(lo - ZOOM_MIN_DEFAULT) < 1e-9) {
+    await chrome.storage.local.remove("cfg:zoomMin");
+  } else {
+    await chrome.storage.local.set({ "cfg:zoomMin": lo });
+  }
+  if (Math.abs(hi - ZOOM_MAX_DEFAULT) < 1e-9) {
+    await chrome.storage.local.remove("cfg:zoomMax");
+  } else {
+    await chrome.storage.local.set({ "cfg:zoomMax": hi });
+  }
+  return true;
 }
 
 async function setSite(host, factor) {
@@ -193,6 +231,12 @@ async function renderDefault() {
   $default.value = pct(await getDefault());
 }
 
+async function renderBounds() {
+  const { min, max } = await getBounds();
+  $zoomMin.value = pct(min);
+  $zoomMax.value = pct(max);
+}
+
 function makeButton(label, onClick) {
   const b = document.createElement("button");
   b.textContent = label;
@@ -229,7 +273,7 @@ function makeRow(site, def) {
   tdLvl.className = "lvl";
   const input = document.createElement("input");
   input.type = "number";
-  input.min = "25";
+  input.min = "5";
   input.max = "500";
   input.step = "5";
   // The level is directly editable only on a plain fixed Active site. Auto manages
@@ -310,6 +354,7 @@ async function renderSites() {
 
 async function renderAll() {
   await renderDefault();
+  await renderBounds();
   await renderSites();
 }
 
@@ -347,6 +392,26 @@ document.getElementById("defaultReset").addEventListener("click", async () => {
   await setDefault(1.0);
   await renderAll();
   setStatus("Default reset to 100%.");
+});
+
+$zoomMin.addEventListener("change", async () => {
+  const { max } = await getBounds();
+  const ok = await setBounds(Number($zoomMin.value) / 100, max);
+  await renderBounds();
+  setStatus(ok ? "Slider range updated." : "Min must be below max.");
+});
+
+$zoomMax.addEventListener("change", async () => {
+  const { min } = await getBounds();
+  const ok = await setBounds(min, Number($zoomMax.value) / 100);
+  await renderBounds();
+  setStatus(ok ? "Slider range updated." : "Max must be above min.");
+});
+
+document.getElementById("zoomRangeReset").addEventListener("click", async () => {
+  await chrome.storage.local.remove(["cfg:zoomMin", "cfg:zoomMax"]);
+  await renderBounds();
+  setStatus("Slider range reset to 5-400%.");
 });
 
 document.getElementById("export").addEventListener("click", async () => {
@@ -388,6 +453,8 @@ window.ZP = {
   DEFAULT_KEY,
   getDefault,
   setDefault,
+  getBounds,
+  setBounds,
   setSite,
   setExcluded,
   setPaused,

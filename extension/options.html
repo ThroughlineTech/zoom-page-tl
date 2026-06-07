@@ -127,9 +127,26 @@
     </p>
     <div class="row">
       <label>
-        <input type="number" id="default" min="25" max="500" step="5" /> %
+        <input type="number" id="default" min="5" max="500" step="5" /> %
       </label>
       <button id="defaultReset">Back to 100%</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Zoom slider range</h2>
+    <p class="hint">
+      The popup's zoom slider runs between these limits. A level set outside this
+      range still applies; the slider just stops at the ends. Range 5% to 500%.
+    </p>
+    <div class="row">
+      <label>
+        <input type="number" id="zoomMin" min="5" max="500" step="5" /> % min
+      </label>
+      <label>
+        <input type="number" id="zoomMax" min="5" max="500" step="5" /> % max
+      </label>
+      <button id="zoomRangeReset">Reset to 5-400%</button>
     </div>
   </section>
 

@@ -18,6 +18,12 @@ zoom only. See `HANDOFF.md` for the full design rationale and the engineering br
 
 - Click the toolbar button to set the zoom level for the current site. The level is
   remembered per hostname.
+- Drag the zoom slider (top of the popup) to zoom the page live - it reflows as you
+  drag, with soft detents at the common levels (100%, 125%, 150%, ...) that you can
+  slide right past. A drag is coarse by design; for an exact value, click the percent
+  to type it, focus the slider and use the arrow keys (+/-1%), or hold Ctrl/Shift and
+  scroll the mouse wheel over the slider. The slider runs 5% to 400% by default; set
+  your own range in Options.
 - The popup's "Fit" button AutoFits the zoom to the window: it shrinks a page that is too
   wide, or enlarges a site whose content sits in a narrow centered column (filling the
   empty side margins). If the page already spans the window it says so. "Fit" is a
@@ -47,10 +53,11 @@ zoom only. See `HANDOFF.md` for the full design rationale and the engineering br
   at `chrome://extensions/shortcuts`.
 - The toolbar badge shows the current site's zoom percent.
 - "Options" (popup footer, or the extension's options page) lets you set a global
-  default zoom for new sites and manage every saved site in two lists: Active (edit its
-  level, pause/resume it, or exclude it) and Excluded (include it again, or remove it).
-  Export/import your levels and exclude list as JSON. Sites you paused or excluded from
-  the popup show up here too, so you can manage them without revisiting the page.
+  default zoom for new sites, set the zoom slider's range (min/max), and manage every
+  saved site in two lists: Active (edit its level, pause/resume it, or exclude it) and
+  Excluded (include it again, or remove it). Export/import your levels and exclude list
+  as JSON. Sites you paused or excluded from the popup show up here too, so you can
+  manage them without revisiting the page.
 
 ## Layout
 
@@ -66,7 +73,7 @@ zoom-page-tl/
     manifest.json
     background.js           service worker: bubble suppression, badge, commands, AutoFit
     content.js              document_start: applies CSS zoom from storage, AutoFit measure
-    zoom.js                 shared step helpers for popup + options
+    zoom.js                 shared helpers: zoom ladder + slider log-map/snap (popup, options, content)
     popup.html
     popup.js
     options.html            options page: default zoom, site manager, import/export
@@ -80,6 +87,7 @@ zoom-page-tl/
     server.js               local static server (real localhost hostname)
     core.spec.js            zoom apply, no-bubble proxy, live update, reset
     autofit.spec.js         AutoFit measure/clamp/persist
+    slider.spec.js          slider log-map/snap math, live preview, settable extents
     options.spec.js         default zoom, site manager UI, import/export
   docs/
     chrome-zoom-api-reference.md

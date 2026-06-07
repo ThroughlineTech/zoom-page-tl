@@ -167,7 +167,7 @@ test("import clamps out-of-range values and drops 100% / invalid", async ({
     chrome.storage.local.get(null)
   );
   expect(stored["z:huge.example.com"]).toBe(5);
-  expect(stored["z:tiny.example.com"]).toBe(0.25);
+  expect(stored["z:tiny.example.com"]).toBe(0.05); // widened floor (was 0.25)
   expect(stored["z:one.example.com"]).toBeUndefined();
   expect(stored["z:bad.example.com"]).toBeUndefined();
 });
