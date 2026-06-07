@@ -108,6 +108,10 @@
   .scroll { max-height: 320px; overflow-y: auto; scrollbar-gutter: stable; }
   .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .status { color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 8px; }
+  .brand { margin-top: 22px; text-align: center; color: var(--muted); font-size: 12px; }
+  .brand a { color: var(--accent); text-decoration: none; }
+  .brand a:hover { text-decoration: underline; }
+  .brand .sep { margin: 0 6px; opacity: 0.6; }
 </style>
 </head>
 <body>
@@ -169,6 +173,13 @@
     </div>
     <div class="status" id="status"></div>
   </section>
+
+  <footer class="brand">
+    Brought to you by
+    <a href="https://www.throughlinetech.net/" target="_blank" rel="noopener noreferrer">Throughline Tech, LLC.</a>
+    <span class="sep">&middot;</span>
+    <a href="https://github.com/ThroughlineTech/zoom-page-tl" target="_blank" rel="noopener noreferrer">GitHub</a>
+  </footer>
 </main>
 
 <script src="zoom.js"></script>

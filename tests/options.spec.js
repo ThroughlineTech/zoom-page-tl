@@ -312,6 +312,19 @@ test("options UI toggles Auto for an active site", async ({
   ).not.toBeDisabled();
 });
 
+test("options footer links to the company site and the repo", async ({
+  page,
+  extensionId,
+}) => {
+  await openOptions(page, extensionId);
+  await expect(
+    page.locator(".brand a", { hasText: "Throughline Tech" })
+  ).toHaveAttribute("href", "https://www.throughlinetech.net/");
+  await expect(
+    page.locator(".brand a", { hasText: "GitHub" })
+  ).toHaveAttribute("href", "https://github.com/ThroughlineTech/zoom-page-tl");
+});
+
 test("site names are links that open the site", async ({
   page,
   extensionId,
