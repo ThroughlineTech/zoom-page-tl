@@ -171,8 +171,25 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   factor to `<html>` WITHOUT writing storage (no write churn, no badge/tab fan-out), so
   the page reflows in real time as you drag; the popup commits once to storage on
   release. Because `apply()` updates `desired`, the re-assert observer holds the preview
-  steady instead of reverting it. Ignored while suppressed. Wrapped in try/catch
-  for pages where the extension context is unavailable.
+  steady instead of reverting it. Ignored while suppressed. Also drives the per-site
+  RE-CENTER fix (`rc:<host>`, opt-in): some sites size full-bleed wrappers to the device
+  viewport (`100vw` / `min-width:100vw`), which Chromium does NOT shrink under CSS `zoom`
+  (vw resolves against the un-zoomed viewport), so content centered inside drifts sideways
+  and clips. When enabled and zoom != 1, `applyRecenter` measures the inset content column
+  (via `pickContentTargets`), finds the outermost over-wide wrapper containing it, and writes
+  a CONTENT-SCRIPT-OWNED stylesheet rule (`<style id=zp-recenter>`) of the form
+  `<wrapper-selector>{transform:translateX(shift) !important}`. Two subtleties make it stable
+  on SPA sites (e.g. WaPo) that re-render/re-create the wrapper during hydration and on scroll:
+  (1) it targets a STABLE selector (the wrapper's id or class chain, verified unique), NOT
+  inline style or a marker attribute - so the rule keeps matching whatever the site re-renders,
+  flicker-free (an inline transform got wiped each re-render -> bounce); (2) the shift ACCUMULATES
+  (`shift += drift / Z`, the `/ Z` because the translate is inside the root `zoom:Z`), so a
+  reading of an already-centered column is a no-op instead of a reset - no feedback oscillation.
+  A transient measurement miss (column mid-render) returns WITHOUT clearing; the rule is cleared
+  only when genuinely off (100%, flag off, suppressed, or the column is not in an over-wide
+  wrapper). Debounced (`scheduleRecenter`) and re-applied on storage change, load (plus a delayed
+  pass), resize, and `<html>` replacement. Wrapped in try/catch for pages where the extension
+  context is unavailable.
 
 - `extension/background.js`
   Service worker. On `tabs.onUpdated` (status loading) and `tabs.onActivated`, calls
@@ -234,15 +251,18 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   type), Arrow keys on the slider nudge +/-1%, and Ctrl/Shift + wheel steps the ladder.
   The slider extents are read from `cfg:zoomMin`/`cfg:zoomMax` (default 5%/400%) on open.
   The slider/stepper/presets/percent all grey out and disable while suppressed or in
-  Auto, like the other manual numbers.
+  Auto, like the other manual numbers. A "Re-center when zoomed" toggle (`rc:<host>`)
+  writes the per-site re-center flag; it is enabled whenever the site is not suppressed
+  (independent of Auto).
 
 - `extension/options.html` / `extension/options.js`
   The options page (also reachable from the popup footer). Four sections: a global
   default zoom for un-customized sites (stored under `cfg:defaultZoom`); a **Zoom slider
   range** (min/max stored under `cfg:zoomMin`/`cfg:zoomMax`, default 5%/400%, clamped to
   the 5%-500% hard range and rejecting `max <= min`); a site manager split into an
-  **Active** list and an **Excluded** list; and JSON import/export. `getBounds`/
-  `setBounds` are exposed on `window.ZP` for the test suite. The
+  **Active** list and an **Excluded** list; and JSON import/export. Each site row has a
+  "Center" button (the per-site `rc:` re-center toggle) alongside Auto/Pause/Exclude/Remove.
+  `getBounds`/`setBounds`/`setRecenter` are exposed on `window.ZP` for the test suite. The
   manager lists the union of every customized host (`z:` level, `x:` excluded, or `p:`
   paused). Active rows have inline level editing, a Pause/Resume toggle, an Exclude
   button (moves the row to the Excluded list), and Remove; a paused active row shows a
@@ -332,6 +352,12 @@ All loadable files live under `extension/`. Load unpacked points at that folder.
   then re-added as this explicit opt-in.) The re-assert observers still hold whatever level
   is current applied against sites that clobber the inline zoom (re-assert, not re-measure).
   Auto is NOT in JSON export/import yet (a possible follow-up, like Exclude is).
+- Re-center: `rc:<hostname>` = `true` is a per-site, opt-in layout fix for sites whose
+  content drifts sideways under CSS `zoom` (full-bleed `100vw`/`min-width:100vw` wrappers
+  that do not shrink under zoom - see the content.js entry). When set and zoom != 1, the
+  content script translates the offending wrapper so the content column re-centers. It is
+  inert at 100% and while suppressed, and is NOT exported (transient, like `af:`). Written
+  by the popup "Re-center when zoomed" toggle and the options "Center" button.
 
 Keying is by `location.hostname`. This matches ZPWE's "treat domain and subdomains as
 separate sites" behavior: `x.com`, `www.x.com`, and `sub.x.com` are independent, and
@@ -441,6 +467,11 @@ the original Zoom Page WE. Status of the highest-signal candidates for this rewr
   Remove clears `z:`/`x:`/`p:`). Exclude is carried in JSON export/import (the
   `excluded` array); pause is transient and not exported. Covered by
   `tests/exclude.spec.js`, `tests/pause.spec.js`, `tests/options.spec.js` - DONE.
+- Content drifts sideways under zoom [DONE]. Sites with full-bleed `100vw`/`min-width:100vw`
+  wrappers (e.g. washingtonpost.com) push their centered content off to the side and clip it
+  as you zoom in, because Chromium resolves `vw` against the un-zoomed viewport under CSS
+  `zoom`. Fixed by the per-site Re-center toggle (`rc:<host>`), which translates the offending
+  wrapper back to center. Covered by `tests/recenter.spec.js` (with the `/drift` fixture).
 - CSS-zoom site-compat bugs (e.g. cursor hit-offset at non-100% zoom on map/overlay
   UIs) - OPEN.
 - A durable persistence regression test (incognito + restart + new tab) - OPEN.

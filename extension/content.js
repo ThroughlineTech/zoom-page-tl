@@ -20,6 +20,7 @@
   const excludedKey = "x:" + host; // when set, this site is excluded (never zoom)
   const pausedKey = "p:" + host; // when set, zoom is paused (temporarily) for this host
   const autoKey = "af:" + host; // when set, this site is in EXPLICIT auto-fit mode
+  const recenterKey = "rc:" + host; // when set, re-center content that drifts under zoom
 
   const MIN = 0.05; // hard floor (matches ZOOM_CLAMP_MIN); the slider can reach 5%
   const MAX = 5.0;
@@ -33,6 +34,17 @@
   let suppressed = false;
   let autoMode = false;
   let desired = 1.0;
+  // Re-center (rc:<host>, opt-in): some sites size full-bleed wrappers to the device
+  // viewport (100vw / min-width:100vw). Under CSS `zoom` those wrappers do NOT shrink
+  // (Chromium resolves vw against the un-zoomed viewport), so content centered inside
+  // them drifts sideways and clips. When enabled, we translate the offending wrapper
+  // back so the content column re-centers. `recenterEl` is the element we transformed
+  // (kept so we can clear it).
+  let recenter = false;
+  let recenterEl = null; // only used for the marker-attribute fallback selector
+  let recenterStyle = null; // our owned <style> carrying the transform rule
+  let recenterShift = 0; // the translateX (CSS px) currently in our rule
+  let recenterSelector = ""; // the selector our rule currently targets
 
   function apply(factor) {
     desired = factor && factor > 0 ? factor : 1.0;
@@ -54,15 +66,17 @@
   function refresh() {
     try {
       chrome.storage.local.get(
-        [key, DEFAULT_KEY, GLOBAL_OFF_KEY, excludedKey, pausedKey, autoKey],
+        [key, DEFAULT_KEY, GLOBAL_OFF_KEY, excludedKey, pausedKey, autoKey, recenterKey],
         (res) => {
           if (chrome.runtime.lastError) return;
           suppressed =
             !!res[GLOBAL_OFF_KEY] || !!res[excludedKey] || !!res[pausedKey];
           autoMode = !suppressed && !!res[autoKey];
+          recenter = !suppressed && !!res[recenterKey];
           // Off globally, or excluded/paused here: leave the page at its natural
           // 100%, ignoring any stored factor and the global default.
           apply(suppressed ? 1.0 : resolve(res));
+          scheduleRecenter(); // (re)apply or clear the horizontal correction
         }
       );
     } catch (e) {
@@ -86,7 +100,8 @@
         changes[GLOBAL_OFF_KEY] ||
         changes[excludedKey] ||
         changes[pausedKey] ||
-        changes[autoKey]
+        changes[autoKey] ||
+        changes[recenterKey]
       ) {
         refresh();
       }
@@ -132,6 +147,146 @@
       }
     }
     return { column, widest };
+  }
+
+  // --- Re-center (rc:<host>) -------------------------------------------------
+  // The correction is applied via a content-script-OWNED stylesheet rule keyed on a
+  // stable selector for the offending wrapper - NOT inline style on the wrapper. SPA
+  // sites (e.g. WaPo) re-render and re-CREATE that wrapper during hydration and on
+  // scroll; an inline transform (or a marker attribute) gets wiped, which made the
+  // page bounce drift<->center. A stylesheet rule keeps matching whatever the site
+  // renders, so the fix survives re-renders flicker-free.
+  function ensureRecenterStyle() {
+    if (!recenterStyle || !recenterStyle.isConnected) {
+      recenterStyle = document.createElement("style");
+      recenterStyle.id = "zp-recenter";
+      (document.head || document.documentElement).appendChild(recenterStyle);
+    }
+    return recenterStyle;
+  }
+  function clearRecenter() {
+    if (recenterStyle) recenterStyle.textContent = "";
+    recenterShift = 0;
+    recenterSelector = "";
+    if (recenterEl) {
+      try {
+        recenterEl.removeAttribute("data-zp-recenter");
+      } catch (e) {
+        /* element may be gone after a re-render */
+      }
+      recenterEl = null;
+    }
+  }
+  // A stable, UNIQUE selector for the wrapper (id, else its classes) so the rule keeps
+  // matching after a re-render. null => caller falls back to a marker attribute.
+  function selectorFor(el) {
+    try {
+      const tag = el.tagName.toLowerCase();
+      if (el.id) {
+        const s = tag + "#" + CSS.escape(el.id);
+        if (document.querySelectorAll(s).length === 1) return s;
+      }
+      const cls =
+        typeof el.className === "string"
+          ? el.className.trim().split(/\s+/).filter(Boolean)
+          : [];
+      if (cls.length) {
+        const s = tag + cls.map((c) => "." + CSS.escape(c)).join("");
+        if (document.querySelectorAll(s).length === 1) return s;
+      }
+    } catch (e) {
+      /* bad className / unsupported selector */
+    }
+    return null;
+  }
+
+  // Measure the content column, find the full-bleed wrapper it sits inside, and write
+  // a rule that translates that wrapper so the column re-centers. All measured in
+  // painted pixels (getBoundingClientRect and clientWidth share that space under CSS
+  // zoom); the translate runs INSIDE zoom:Z, so the shift is divided by Z.
+  function applyRecenter() {
+    // Definitely off: clear the rule. (These are the ONLY conditions that clear -
+    // a transient measurement miss during a re-render must NOT, or the page bounces.)
+    if (!recenter || suppressed || !document.body) {
+      clearRecenter();
+      return;
+    }
+    const Z = desired && desired > 0 ? desired : 1;
+    if (Math.abs(Z - 1) < 1e-6) {
+      clearRecenter(); // nothing to correct at 100%
+      return;
+    }
+    const html = document.documentElement;
+    const viewport = html.clientWidth;
+    if (!viewport) return;
+    const { column } = pickContentTargets(viewport);
+    if (!column) return; // transient (article mid-render): keep the existing rule
+    const cr = column.getBoundingClientRect();
+    const drift = viewport / 2 - (cr.left + cr.width / 2); // painted px to shift
+    // Outermost full-bleed ancestor (wider than the viewport) that holds the column.
+    let target = null;
+    for (let el = column; el && el !== document.body; el = el.parentElement) {
+      if (el.getBoundingClientRect().width > viewport + 8) target = el;
+    }
+    if (!target) {
+      clearRecenter(); // column present but NOT inside an over-wide wrapper: no drift
+      return;
+    }
+    // Prefer a stable selector (survives re-renders); else mark the element.
+    let selector = selectorFor(target);
+    if (selector) {
+      if (recenterEl) {
+        try {
+          recenterEl.removeAttribute("data-zp-recenter");
+        } catch (e) {
+          /* ignore */
+        }
+        recenterEl = null;
+      }
+    } else {
+      if (recenterEl && recenterEl !== target) {
+        try {
+          recenterEl.removeAttribute("data-zp-recenter");
+        } catch (e) {
+          /* ignore */
+        }
+      }
+      recenterEl = target;
+      try {
+        target.setAttribute("data-zp-recenter", "");
+      } catch (e) {
+        /* ignore */
+      }
+      selector = "[data-zp-recenter]";
+    }
+    // Already centered (our rule is holding it, or the page needs no shift): no-op.
+    // Crucially this does NOT clear - that would drop the rule and re-drift.
+    if (Math.abs(drift) < 4) return;
+    // Accumulate: the measured drift is the RESIDUAL with the current shift applied,
+    // so the new shift is current + drift/Z (the /Z because the translate is inside
+    // zoom:Z). This converges in one step and a centered reading becomes a no-op,
+    // so there is no feedback oscillation. Reset the base if the wrapper changed.
+    const base = selector === recenterSelector ? recenterShift : 0;
+    recenterShift = base + drift / Z;
+    recenterSelector = selector;
+    ensureRecenterStyle().textContent =
+      selector +
+      "{transform:translateX(" +
+      recenterShift.toFixed(2) +
+      "px) !important;}";
+  }
+
+  // Debounced so a burst of mutations / a resize coalesces into one measurement.
+  let recenterTimer = null;
+  function scheduleRecenter() {
+    if (recenterTimer) clearTimeout(recenterTimer);
+    recenterTimer = setTimeout(() => {
+      try {
+        applyRecenter();
+      } catch (e) {
+        /* ignore */
+      }
+    }, 150);
   }
 
   // AutoFit-to-width. Three regimes (see HANDOFF section 9): a centered content
@@ -302,6 +457,7 @@
       if (suppressed) return;
       apply(desired);
       watchStyle();
+      scheduleRecenter(); // the <html> (and our transform) was replaced; re-apply
     }).observe(document, { childList: true });
   } catch (e) {
     /* ignore */
@@ -338,10 +494,15 @@
   }
   try {
     window.addEventListener("load", () => {
-      refresh(); // re-assert the level after the load churn
+      refresh(); // re-assert the level (and re-center) after the load churn
       scheduleRefit(); // ...and re-fit if this site is explicitly in auto mode
+      // A late re-render can wipe our transform; re-apply once the page settles.
+      setTimeout(scheduleRecenter, 700);
     });
-    window.addEventListener("resize", scheduleRefit);
+    window.addEventListener("resize", () => {
+      scheduleRefit();
+      scheduleRecenter(); // the drift depends on the viewport width
+    });
   } catch (e) {
     /* ignore */
   }

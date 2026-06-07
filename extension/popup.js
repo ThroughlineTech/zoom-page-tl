@@ -19,6 +19,7 @@ let currentGlobalOff = false; // cfg:off - master switch, off on every site
 let currentExcluded = false; // x:<host> - never zoom this site
 let currentPaused = false; // p:<host> - zoom suspended for now (resume later)
 let currentAuto = false; // af:<host> - explicit auto-fit mode (re-fits each load)
+let currentRecenter = false; // rc:<host> - re-center content that drifts under zoom
 let zoomMin = ZOOM_MIN_DEFAULT; // cfg:zoomMin - slider low extent (factor)
 let zoomMax = ZOOM_MAX_DEFAULT; // cfg:zoomMax - slider high extent (factor)
 let dragging = false; // true while the slider thumb is being dragged
@@ -31,6 +32,7 @@ const $powerLabel = document.getElementById("powerLabel");
 const $pause = document.getElementById("pause");
 const $exclude = document.getElementById("exclude");
 const $auto = document.getElementById("auto");
+const $recenter = document.getElementById("recenter");
 const $slider = document.getElementById("slider");
 const $ticks = document.getElementById("ticks");
 
@@ -130,6 +132,10 @@ function render() {
   }
   // Highlight "Auto" while auto mode is on.
   $auto.classList.toggle("on", currentAuto && !suppressed);
+  // Re-center is a per-site layout fix; usable whenever the site is being zoomed
+  // (so not while suppressed), independent of Auto.
+  $recenter.checked = currentRecenter;
+  $recenter.disabled = suppressed;
 }
 
 async function persist() {
@@ -355,6 +361,23 @@ $auto.addEventListener("click", async () => {
   }
 });
 
+// Re-center toggle. Writes rc:<host>; the content script picks it up live and
+// translates the drifting wrapper back to center (or clears it when off).
+$recenter.addEventListener("change", async () => {
+  if (!currentHost) {
+    $recenter.checked = false;
+    return;
+  }
+  currentRecenter = $recenter.checked;
+  const rcKey = "rc:" + currentHost;
+  if (currentRecenter) {
+    await chrome.storage.local.set({ [rcKey]: true });
+  } else {
+    await chrome.storage.local.remove(rcKey);
+  }
+  render();
+});
+
 document.getElementById("options").addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
@@ -383,7 +406,8 @@ function sanitizeBound(v, fallback) {
       hostKey(currentHost),
       "x:" + currentHost,
       "p:" + currentHost,
-      "af:" + currentHost
+      "af:" + currentHost,
+      "rc:" + currentHost
     );
   }
   const res = await chrome.storage.local.get(keys);
@@ -399,6 +423,7 @@ function sanitizeBound(v, fallback) {
     currentExcluded = !!res["x:" + currentHost];
     currentPaused = !!res["p:" + currentHost];
     currentAuto = !!res["af:" + currentHost];
+    currentRecenter = !!res["rc:" + currentHost];
   }
   buildTicks();
   render();

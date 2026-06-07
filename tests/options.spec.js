@@ -259,9 +259,9 @@ test("listSites reports level, excluded, and paused state", async ({
   await openOptions(page, extensionId);
   const sites = await page.evaluate(() => window.ZP.listSites());
   expect(sites).toEqual([
-    { host: "a.example.com", factor: 1.5, excluded: false, paused: false, auto: false },
-    { host: "b.example.com", factor: null, excluded: true, paused: false, auto: false },
-    { host: "c.example.com", factor: 1.2, excluded: false, paused: true, auto: false },
+    { host: "a.example.com", factor: 1.5, excluded: false, paused: false, auto: false, recenter: false },
+    { host: "b.example.com", factor: null, excluded: true, paused: false, auto: false, recenter: false },
+    { host: "c.example.com", factor: 1.2, excluded: false, paused: true, auto: false, recenter: false },
   ]);
 });
 

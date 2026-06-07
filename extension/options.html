@@ -69,7 +69,7 @@
   /* Fixed layout so the Active and Excluded tables line up column-for-column. */
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   col.c-zoom { width: 86px; }
-  col.c-act { width: 280px; }
+  col.c-act { width: 340px; }
   th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 4px 8px; }
   td { padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
   td.host { font-variant-numeric: tabular-nums; word-break: break-all; }
@@ -77,8 +77,8 @@
   td.host a:hover { color: var(--accent); text-decoration: underline; }
   td.lvl { white-space: nowrap; }
   td.lvl input { width: 54px; }
-  /* Every row has the same 4 action buttons in an even grid -> they align. */
-  td.act .btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  /* Every row has the same 5 action buttons in an even grid -> they align. */
+  td.act .btns { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
   td.act button { width: 100%; padding: 6px 4px; font-size: 12px; }
   td.act button.on {
     background: var(--accent);

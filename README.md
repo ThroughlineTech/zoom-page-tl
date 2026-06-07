@@ -40,6 +40,12 @@ zoom only. See `HANDOFF.md` for the full design rationale and the engineering br
   `Alt+Shift+Up / Down / 0` do the same and are rebindable at
   `chrome://extensions/shortcuts`; AutoFit and the global on/off both have commands
   there with no default key (bind them yourself if you want a hotkey).
+- "Re-center when zoomed" (popup, also a per-site "Center" button in Options) is an
+  opt-in fix for sites whose content slides off to the side and gets clipped as you zoom
+  in - some sites size their page wrappers to the full window in a way the browser does
+  not shrink under zoom, so the article ends up half off-screen. Turn this on for such a
+  site and the content is shifted back to center. It is per-site and only acts while
+  zoomed; leave it off for sites that already behave.
 - "Pause" and "Exclude" (popup footer) both step the extension aside on the current
   site: it holds the page at 100% and hands zoom back to Chrome, so the normal native
   Ctrl +/- (and its zoom bubble) work again, and the badge shows "off". Pause is
@@ -72,7 +78,7 @@ zoom-page-tl/
   extension/                the loadable extension (point "Load unpacked" here)
     manifest.json
     background.js           service worker: bubble suppression, badge, commands, AutoFit
-    content.js              document_start: applies CSS zoom from storage, AutoFit measure
+    content.js              document_start: applies CSS zoom from storage, AutoFit measure, re-center
     zoom.js                 shared helpers: zoom ladder + slider log-map/snap (popup, options, content)
     popup.html
     popup.js
@@ -88,6 +94,7 @@ zoom-page-tl/
     core.spec.js            zoom apply, no-bubble proxy, live update, reset
     autofit.spec.js         AutoFit measure/clamp/persist
     slider.spec.js          slider log-map/snap math, live preview, settable extents
+    recenter.spec.js        re-center drifting layouts under zoom (the /drift fixture)
     options.spec.js         default zoom, site manager UI, import/export
   docs/
     chrome-zoom-api-reference.md

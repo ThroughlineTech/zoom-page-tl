@@ -39,6 +39,18 @@ const routes = {
       "narrow",
       '<div id="col" style="max-width:600px;margin:0 auto;height:400px;background:#9ca3af"></div>'
     ),
+  // The "content drifts right under zoom" pattern (WaPo et al.): a full-bleed
+  // wrapper pinned to the DEVICE viewport via min-width:100vw - which does NOT
+  // shrink under CSS `zoom` (Chromium resolves vw against the un-zoomed viewport) -
+  // with the content column centered inside it. Under zoom the column drifts off to
+  // the side; the Re-center fix must translate the wrapper to bring it back.
+  "/drift": () =>
+    page(
+      "drift",
+      '<div id="shell" style="min-width:100vw;background:#eef">' +
+        '<div id="col" style="max-width:400px;margin:0 auto;height:1500px;background:#9ca3af"></div>' +
+        "</div>"
+    ),
   // An inset content column inside a full-width wrapper, plus a full-bleed
   // "breakout" pulled off the left edge with a negative margin (the CNN ad-zone
   // pattern). AutoFit must fill the column and ignore the breakout's overflow.

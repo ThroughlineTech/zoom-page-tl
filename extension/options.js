@@ -122,6 +122,18 @@ async function setAuto(host, auto) {
   }
 }
 
+// Re-center (rc:, opt-in): translate content that drifts sideways under zoom back
+// to center. The content script applies it live.
+async function setRecenter(host, on) {
+  if (!host) return;
+  const rcKey = "rc:" + host;
+  if (on) {
+    await chrome.storage.local.set({ [rcKey]: true });
+  } else {
+    await chrome.storage.local.remove(rcKey);
+  }
+}
+
 // Pause (p:, suspend for now) / resume a site. The z: level is left intact so
 // resuming restores it.
 async function setPaused(host, paused) {
@@ -134,9 +146,15 @@ async function setPaused(host, paused) {
   }
 }
 
-// Forget a site entirely: drop its level and its exclude/pause flags.
+// Forget a site entirely: drop its level and all its flags.
 async function removeSite(host) {
-  await chrome.storage.local.remove([hostKey(host), "x:" + host, "p:" + host]);
+  await chrome.storage.local.remove([
+    hostKey(host),
+    "x:" + host,
+    "p:" + host,
+    "af:" + host,
+    "rc:" + host,
+  ]);
 }
 
 // Every customized site, with its state. factor is the stored level or null;
@@ -147,7 +165,14 @@ async function listSites() {
   const entry = (host) => {
     let e = byHost.get(host);
     if (!e) {
-      e = { host, factor: null, excluded: false, paused: false, auto: false };
+      e = {
+        host,
+        factor: null,
+        excluded: false,
+        paused: false,
+        auto: false,
+        recenter: false,
+      };
       byHost.set(host, e);
     }
     return e;
@@ -157,6 +182,7 @@ async function listSites() {
     else if (k.startsWith("x:")) entry(k.slice(2)).excluded = true;
     else if (k.startsWith("p:")) entry(k.slice(2)).paused = true;
     else if (k.startsWith("af:")) entry(k.slice(3)).auto = true;
+    else if (k.startsWith("rc:")) entry(k.slice(3)).recenter = true;
   }
   const sites = [...byHost.values()];
   sites.sort((a, b) => a.host.localeCompare(b.host));
@@ -255,7 +281,7 @@ function makeRemoveButton(host) {
 }
 
 function makeRow(site, def) {
-  const { host, factor, excluded, paused, auto } = site;
+  const { host, factor, excluded, paused, auto, recenter } = site;
   const tr = document.createElement("tr");
   if (excluded) tr.className = "excluded";
   else if (paused) tr.className = "paused";
@@ -308,6 +334,14 @@ function makeRow(site, def) {
   autoBtn.title = "Auto-fit this site on every page load";
   if (auto) autoBtn.className = "on";
 
+  const recenterBtn = makeButton("Center", async () => {
+    await setRecenter(host, !recenter);
+    await renderSites();
+    setStatus(recenter ? `${host}: re-center off.` : `${host}: re-center on.`);
+  });
+  recenterBtn.title = "Re-center content that drifts sideways when zoomed";
+  if (recenter) recenterBtn.className = "on";
+
   const pauseBtn = makeButton(paused ? "Resume" : "Pause", async () => {
     await setPaused(host, !paused);
     await renderSites();
@@ -328,7 +362,7 @@ function makeRow(site, def) {
 
   const btns = document.createElement("div");
   btns.className = "btns";
-  btns.append(autoBtn, pauseBtn, toggleBtn, makeRemoveButton(host));
+  btns.append(autoBtn, recenterBtn, pauseBtn, toggleBtn, makeRemoveButton(host));
 
   const tdAct = document.createElement("td");
   tdAct.className = "act";
@@ -459,6 +493,7 @@ window.ZP = {
   setExcluded,
   setPaused,
   setAuto,
+  setRecenter,
   removeSite,
   listSites,
   exportData,
