@@ -5,7 +5,9 @@ Chrome's native zoom bubble. It applies zoom with the CSS `zoom` property and ke
 browser zoom disabled so the omnibox indicator can never appear.
 
 Independent rewrite, in spirit, of "Zoom Page WE" by DW-dev, scoped to per-site full
-zoom only. See `HANDOFF.md` for the full design rationale and the engineering brief.
+zoom only. Version 1.0.0, packaged for the Chrome Web Store. Contributors and coding
+agents start at [AGENTS.md](AGENTS.md); current behavior is documented in
+[docs/state-of-the-system/](docs/state-of-the-system/00-README.md).
 
 ## Install (development)
 
@@ -70,35 +72,34 @@ zoom only. See `HANDOFF.md` for the full design rationale and the engineering br
 ```
 zoom-page-tl/
   README.md                 this file
-  HANDOFF.md                full engineering brief (read this first to develop)
+  AGENTS.md                 working rules for coding agents (CLAUDE.md points here)
+  PRIVACY.md                privacy policy (linked from the store listing)
   LICENSE                   MIT
-  package.json              tooling: lint (Chrome check), test (Playwright), web-ext
-  playwright.config.js      Playwright config (serial, local test server)
-  .gitignore
+  package.json              tooling: lint, test, dev browser, web-ext run/build
+  playwright.config.js      Playwright config (serial, one worker, local test server)
   extension/                the loadable extension (point "Load unpacked" here)
     manifest.json
-    background.js           service worker: bubble suppression, badge, commands, AutoFit
-    content.js              document_start: applies CSS zoom from storage, AutoFit measure, re-center
+    background.js           service worker: bubble suppression, badge, commands, master switch
+    content.js              document_start: applies CSS zoom, Ctrl +/-/0, AutoFit, re-center, re-assert
     zoom.js                 shared helpers: zoom ladder + slider log-map/snap (popup, options, content)
-    popup.html
-    popup.js
-    options.html            options page: default zoom, site manager, import/export
-    options.js
-    icons/                  color toolbar icons + icons/off/ (greyed, used while off)
+    popup.html / popup.js   toolbar popup
+    options.html / options.js  options page: default zoom, slider range, site manager, import/export
+    icons/                  color toolbar icons + icons/off/ (greyed, used while off everywhere)
   scripts/
-    check.js                Chrome-targeted static check (replaces web-ext lint)
-    make-off-icons.js       one-off: generate the greyed icons/off/ set from the color icons
-  tests/
-    fixtures.js             Playwright fixture: loads the unpacked extension
-    server.js               local static server (real localhost hostname)
-    core.spec.js            zoom apply, no-bubble proxy, live update, reset
-    autofit.spec.js         AutoFit measure/clamp/persist
-    slider.spec.js          slider log-map/snap math, live preview, settable extents
-    recenter.spec.js        re-center drifting layouts under zoom (the /drift fixture)
-    options.spec.js         default zoom, site manager UI, import/export
+    check.js                Chrome-targeted static check (npm run lint)
+    dev-browser.js          live dev browser with hot reload (npm run dev)
+    dev-reload.js           force a hot reload of the dev browser (npm run reload)
+    dev-shot.js             screenshot a URL in the dev browser (npm run shot)
+    dev-lib.js              shared launch flags and hot-reload routine
+    make-off-icons.js       one-off: generate icons/off/ from the color icons
+  tests/                    Playwright suite: fixtures.js, server.js, one spec per feature
+  store/                    Chrome Web Store listing text and screenshots
   docs/
-    chrome-zoom-api-reference.md
-  reference/                (optional) original ZPWE source, read-only, see below
+    state-of-the-system/    code-true reference for the current implementation
+    roadmap.md              backlog, and old-app features ported or declined
+    zpwe-feedback-triage.md triaged real-world reports against Zoom Page WE
+    chrome-zoom-api-reference.md  Chrome zoom/tabs/commands API notes
+  reference/                (optional, git-ignored) original ZPWE source, read-only
 ```
 
 ## How it works (one paragraph)
@@ -118,15 +119,19 @@ absence of a key.
 npm install          # installs dev tooling (Playwright, web-ext)
 npm run lint         # Chrome-targeted static check (manifest, JS syntax, assets)
 npm test             # Playwright suite: loads the extension, asserts behavior
+npm run dev          # headed dev Chromium with the extension, hot-reloads on save
+npm run reload       # force a hot reload of the running dev browser
+npm run shot -- URL  # screenshot URL in the dev browser (.dev-shots/shot.png)
 npm start            # web-ext run -t chromium with a clean profile
-npm run build        # web-ext build -> dist/
+npm run build        # web-ext build -> dist/zoom_page_tl-<version>.zip
 ```
 
 First run only: `npx playwright install chromium` (downloads the browser the tests
 drive). The suite loads the unpacked extension in Chromium's new headless mode and
 asserts real behavior: that CSS zoom reflows the page, that browser zoom stays
 disabled (the observable proxy for "no native zoom bubble"), AutoFit math, and the
-options/import-export flows.
+options/import-export flows. Do not run it while `npm run dev` is up; the headed
+browser starves the runner and tests flake.
 
 Note on `web-ext lint`: it runs Mozilla's addons-linter, which validates against
 Firefox and rejects Chrome's MV3 `service_worker` background plus demands a Gecko
@@ -169,4 +174,4 @@ Alternative sources if it is not installed:
   The `.xpi` is a plain zip; download and unzip.
 
 Keep the reference out of `extension/` and do not merge GPL code into the MIT-licensed
-source. See `HANDOFF.md` section 12.
+source; reimplement from behavior instead (see AGENTS.md, "Invariants").

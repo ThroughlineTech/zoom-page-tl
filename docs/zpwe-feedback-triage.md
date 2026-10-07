@@ -1,4 +1,4 @@
-# Zoom Page WE — Investigate Tickets
+# Zoom Page WE - Investigate Tickets
 
 > Source: Chrome Web Store support page feedback (Zoom Page WE).
 > Generated for import into Plane. Each entry is a candidate "investigate" ticket.
@@ -8,7 +8,7 @@
 
 ---
 
-## OPEN — likely still live
+## OPEN - likely still live
 
 ### 1. Steam Discussions posts cannot be selected when extension is active
 - **Type:** Bug
@@ -20,7 +20,7 @@
 - **Repro:**
   1. Enable extension.
   2. Open a Steam discussions page (e.g. steamcommunity.com/app/<id>/discussions/).
-  3. Attempt to select/highlight a post — selection fails.
+  3. Attempt to select/highlight a post - selection fails.
 - **Notes:** Reporter provided a screen-recording link. Treat external link as untrusted; investigate symptom, not the link.
 
 ### 2. Keyboard shortcuts (Ctrl+7/8/9) are not remappable / collide with other shortcuts
@@ -38,10 +38,10 @@
 - **Description:** chatgpt.com freezes / stops responding / blocks login while the extension is active. No per-site disable/blacklist option exists to work around it. Users request a per-site exclusion (white/black) list.
 - **Repro:**
   1. Enable extension.
-  2. Visit chatgpt.com and attempt to log in — page freezes.
-- **Notes:** Recurring theme — exclusion-list requests appear across many years (see consolidated FR #14).
+  2. Visit chatgpt.com and attempt to log in - page freezes.
+- **Notes:** Recurring theme - exclusion-list requests appear across many years (see consolidated FR #14).
 
-### 4. "Still maintained?" — no public source repo to fork
+### 4. "Still maintained?" - no public source repo to fork
 - **Type:** Question / Project
 - **Priority:** Low
 - **Labels:** question, project, maintenance, recent
@@ -59,7 +59,7 @@
 - **Type:** Bug
 - **Priority:** Medium
 - **Labels:** bug, site-compat, gmail, accessibility
-- **Reporter(s):** Richard McWolff (Jun 16, 2023); related: Jeff Suddaby (May 9, 2019 — zoom won't apply in GMail at all)
+- **Reporter(s):** Richard McWolff (Jun 16, 2023); related: Jeff Suddaby (May 9, 2019 - zoom won't apply in GMail at all)
 - **Description:** Zooming GMail causes the right edge of the page to be cut off in Chromium browsers (works in Firefox). Accessibility-impacting for a user relying on per-site zoom.
 
 ### 7. SHIFT modifier / Ctrl+Shift+Wheel zoom cannot be fully disabled
@@ -89,7 +89,7 @@
 - **Priority:** Medium
 - **Labels:** bug, cursor, css-zoom, site-compat
 - **Reporter(s):** Jeff Statz (Mar 17, 2023)
-- **Description:** At 115–125% zoom, Chrome's cursor hit position is offset from the visible pointer on Google Maps and Keepa's Amazon price-graph overlay. Dev suggested disabling "Use CSS full zoom"; confirm whether a proper fix is possible.
+- **Description:** At 115-125% zoom, Chrome's cursor hit position is offset from the visible pointer on Google Maps and Keepa's Amazon price-graph overlay. Dev suggested disabling "Use CSS full zoom"; confirm whether a proper fix is possible.
 
 ### 11. Performance impact with many tabs open
 - **Type:** Bug / Performance
@@ -103,13 +103,13 @@
 - **Priority:** High
 - **Labels:** bug, bfcache, navigation, recurring
 - **Reporter(s):** Jet Notifier (Jan 18, 2022); M B II (Nov 7, 2021, Google search results specifically)
-- **Description:** After navigating to a page and pressing Back, the page becomes unresponsive/unclickable. Disabling the extension stops it. M B II notes it's specific to Google search results and that resizing the window "refreshes" and restores clickability — points at a bfcache / overlay re-render issue.
+- **Description:** After navigating to a page and pressing Back, the page becomes unresponsive/unclickable. Disabling the extension stops it. M B II notes it's specific to Google search results and that resizing the window "refreshes" and restores clickability - points at a bfcache / overlay re-render issue.
 
-### 13. Conflict with uBlock Origin cosmetic filtering — extension "doesn't work"
+### 13. Conflict with uBlock Origin cosmetic filtering - extension "doesn't work"
 - **Type:** Bug / Compatibility
 - **Priority:** Medium
 - **Labels:** bug, extension-conflict, ublock
-- **Reporter(s):** KR (Jun 5, 2020) — note: another user (Visioo) could not reproduce
+- **Reporter(s):** KR (Jun 5, 2020) - note: another user (Visioo) could not reproduce
 - **Description:** With uBO "cosmetic filtering" enabled (default), the extension reportedly does nothing; disabling CF fixes it. Investigate interaction; possibly add a docs note.
 
 ---
@@ -121,7 +121,7 @@
 - **Priority:** High
 - **Labels:** feature-request, exclusion-list, top-request
 - **Reporter(s):** Trevor Anderson (2025), Laus Bigum (2025), Josh Quillin (2019), root (2019), RJV B (2017), Gelo Elgava (2022, white/black lists for "Apply to dynamic content"), Peter Bacon (2021, global-zoom/disable per-site)
-- **Description:** Repeated, long-standing demand for the ability to exclude specific sites entirely and/or maintain white/black lists — both for the extension overall and specifically for the "Apply to dynamic content (better but slower)" option. Would also serve as the workaround for the freeze/crash site-compat bugs.
+- **Description:** Repeated, long-standing demand for the ability to exclude specific sites entirely and/or maintain white/black lists - both for the extension overall and specifically for the "Apply to dynamic content (better but slower)" option. Would also serve as the workaround for the freeze/crash site-compat bugs.
 
 ### 15. Customizable/remappable keyboard shortcuts + shortcuts for min font size
 - **Type:** Feature Request
@@ -130,7 +130,7 @@
 - **Reporter(s):** Laus Bigum (2025), Gelo Elgava (2022, hotkeys to increase/decrease "Set minimum Font Size"), RJV B (2017, shortcut to set "auto" as default)
 - **Description:** Allow users to remap Ctrl+7/8/9; add hotkeys for minimum font size adjustment; allow setting "auto" zoom level as default / give it a shortcut.
 
-### 16. Font-size unit selection — support 'vw'
+### 16. Font-size unit selection - support 'vw'
 - **Type:** Feature Request
 - **Priority:** Low
 - **Labels:** feature-request, font-size
@@ -142,21 +142,21 @@
 - **Priority:** Low
 - **Labels:** feature-request, autofit
 - **Reporter(s):** Josh Quillin (2019), RJV B (2017)
-- **Description:** Option to only shrink pages to fit the window without enlarging smaller pages; configurable "acceptable overflow" so auto level stays at current/100% when ideal is within a small margin (e.g. 98–103%).
+- **Description:** Option to only shrink pages to fit the window without enlarging smaller pages; configurable "acceptable overflow" so auto level stays at current/100% when ideal is within a small margin (e.g. 98-103%).
 
 ### 18. "Zoom everything except text" / fit-to-width via CSS min-width
 - **Type:** Feature Request
 - **Priority:** Low
 - **Labels:** feature-request, zoom-mode
 - **Reporter(s):** RJV B (2017)
-- **Description:** Request a mode that adjusts layout (e.g. CSS min-width) without shrinking text, similar to old Opera "Fit to width". (Dev previously declined citing UI complexity — re-evaluate.)
+- **Description:** Request a mode that adjusts layout (e.g. CSS min-width) without shrinking text, similar to old Opera "Fit to width". (Dev previously declined citing UI complexity - re-evaluate.)
 
 ### 19. Work on chrome:// and other restricted pages
 - **Type:** Feature Request / Won't-fix candidate
 - **Priority:** Low
 - **Labels:** feature-request, platform-limitation
 - **Reporter(s):** Gesly George (Nov 21, 2022)
-- **Description:** Request zoom support on chrome:// pages. Likely a platform limitation (extensions can't script chrome:// or the web store) — investigate and document as known limitation.
+- **Description:** Request zoom support on chrome:// pages. Likely a platform limitation (extensions can't script chrome:// or the web store) - investigate and document as known limitation.
 
 ### 20. Pre-configured / managed deployment
 - **Type:** Feature Request
@@ -165,7 +165,7 @@
 - **Reporter(s):** Jason Nelson (Feb 4, 2020)
 - **Description:** Ability to deploy the extension pre-configured (e.g. per-tab zoom enabled, "reset zoom when loading" disabled) via managed policy.
 
-### 21. Port to Microsoft Edge (legacy) — likely obsolete
+### 21. Port to Microsoft Edge (legacy) - likely obsolete
 - **Type:** Feature Request
 - **Priority:** Lowest
 - **Labels:** feature-request, browser-port, stale
@@ -201,7 +201,7 @@
 - **Type:** Docs
 - **Priority:** Low
 - **Labels:** docs, zoom-persistence
-- **Reporter(s):** Eric D (2017), thad swan (2017) — dev answered "set Zoom Mode to Per Site"
+- **Reporter(s):** Eric D (2017), thad swan (2017) - dev answered "set Zoom Mode to Per Site"
 - **Description:** Multiple "zoom not remembered" reports were just the Per-Site mode not being set. Make this clearer in onboarding/docs to cut support volume.
 
 ---
@@ -215,7 +215,7 @@
 - **Type:** Bug / Regression-watch
 - **Priority:** High
 - **Labels:** bug, zoom-persistence, regression
-- **Reporter(s):** Recurring across years — Muhammad Riaz Raja (2019), Kirill Lozovatsky (2019/2020), Jakab Gipsz (2019), Milton Rodríguez (2020), James Utting / David C Margotta / Michael V / Tony / Andrew / Gelo Elgava / Yuan Wu (Aug 2022 wave — dev says fixed in v31), Christian-style resets in Karas (2023)
+- **Reporter(s):** Recurring across years - Muhammad Riaz Raja (2019), Kirill Lozovatsky (2019/2020), Jakab Gipsz (2019), Milton Rodríguez (2020), James Utting / David C Margotta / Michael V / Tony / Andrew / Gelo Elgava / Yuan Wu (Aug 2022 wave - dev says fixed in v31), Christian-style resets in Karas (2023)
 - **Description:** Persistent, repeatedly-recurring class of bug: custom zoom/text-zoom/min-font-size not reapplied after page reload, opening links in new tabs, private windows, or browser restart. Each outbreak was patched, but it keeps returning. Recommend a durable regression test suite around persistence (full zoom, text zoom, min font size; normal + incognito; reload + new tab + restart).
 
 ### 27. Image-only pages: image flashes then disappears / image zoom stuck
@@ -229,7 +229,7 @@
 - **Type:** Bug / Regression-watch
 - **Priority:** Medium
 - **Labels:** bug, fouc, white-flash, regression
-- **Reporter(s):** Lee Button (Mar & May 2021, Vivaldi/Edge Dev), barbudo 2005 (Jul 2020, Google), Chad (Sep 2022, blank white page — dev says fixed v33.2)
+- **Reporter(s):** Lee Button (Mar & May 2021, Vivaldi/Edge Dev), barbudo 2005 (Jul 2020, Google), Chad (Sep 2022, blank white page - dev says fixed v33.2)
 - **Description:** Pages render blank/white briefly (or fully blank until reload) due to the content-script opacity:0 hide-then-show mechanism. Community workaround circulated (commenting out the `html { opacity: 0.0; }` rule). Recurs across browsers/versions; revisit the hide-on-load approach.
 
 ### 29. Right+Wheel zoom: scroll gets "stuck" zooming after right-click; touchpad pinch triggers text zoom
@@ -261,5 +261,5 @@
 - **Type:** Bug
 - **Priority:** Low
 - **Labels:** bug, site-compat, youtube, cursor
-- **Reporter(s):** Daniel Albu (Dec 2018) — dev said fixed in 13.1.1
+- **Reporter(s):** Daniel Albu (Dec 2018) - dev said fixed in 13.1.1
 - **Description:** Video progress slider click position offset from actual point on YouTube/media sites at zoom. Related to cursor-offset family (see #10). Regression-check.

@@ -1,26 +1,25 @@
-# Zoom Page WE -> Zoom Page TL: Feature Roadmap
+# Zoom Page TL: Roadmap (from Zoom Page WE)
 
-> This is the verdict doc. It is parallel to the two raw investigation backlogs,
-> `old-app-feature-list-investigation.md` (the OLD app's 15 option features) and
-> `old-app-feature-list-zoom-levels.md` (its 16 zoom-level values). Those two docs
-> enumerate Zoom Page WE's options UI; this doc is the result of investigating
-> them: each old-app feature mapped to what Zoom Page TL already does, then a
-> focused, tiered roadmap of the gaps worth filling, each written as a virtual
-> Plane ticket we can promote later.
+> This is the backlog and verdict doc. Every Zoom Page WE option (15 option
+> features, numbered 001-015, and 16 zoom-level values, ZL-001..016) is mapped to
+> what Zoom Page TL already does, then the gaps worth filling are written as a
+> tiered set of virtual tickets. The raw per-feature investigation stubs it was
+> built from were retired once every item had a verdict here (they remain in git
+> history).
 >
-> Inputs used: the old-app General-tab screenshot, the two investigation docs, the
-> triaged real-world demand signal in `chrome-web-store-buglist.md`, and the
+> Inputs used: the old-app General-tab screenshot, the investigation stubs, the
+> triaged real-world demand signal in `zpwe-feedback-triage.md`, and the
 > current `extension/` code (`content.js`, `background.js`, `popup.js`,
 > `options.js`, `zoom.js`, `manifest.json`). Recommendations are filtered through
-> this app's stated philosophy (`HANDOFF.md` section 1): small, fast, per-site
-> full-page CSS zoom, no native zoom bubble. We add a feature only when it serves
-> that core, or when real-world demand is strong enough to justify a scope
+> this app's stated purpose (AGENTS.md, "What this product is"): small, fast,
+> per-site full-page CSS zoom, no native zoom bubble. We add a feature only when it
+> serves that core, or when real-world demand is strong enough to justify a scope
 > decision (those are flagged STRATEGIC).
 >
-> Virtual ticket IDs are "VT-N". They are NOT created in Plane yet. To promote one,
-> run `/ticket-new` (or `/tn`) with the title and paste the body. Size is S/M/L
-> (matching the HANDOFF backlog convention); priority is Low/Medium/High (matching
-> the buglist).
+> Virtual ticket IDs are "VT-N". They are not in any tracker: this repo has no
+> `.build/config.toml`. Size is S/M/L; priority is Low/Medium/High (matching the
+> triage doc). Current behavior is documented in `state-of-the-system/`; this doc
+> owns what is next and what was declined.
 >
 > Style: ASCII only, no em/en dashes, straight quotes (repo convention).
 
@@ -28,7 +27,7 @@
 
 ## 1. The lens: what this app is on purpose
 
-Zoom Page TL is a deliberate subset of Zoom Page WE. Per `HANDOFF.md` section 1,
+Zoom Page TL is a deliberate subset of Zoom Page WE. Per AGENTS.md ("What this product is"),
 v1 was scoped to "the one feature the author actually uses: per-site full zoom,"
 and the architecture exists to kill the native zoom bubble: browser zoom is held
 `disabled` and all zoom is CSS `zoom` on `<html>`. Several old-app options were
@@ -72,7 +71,7 @@ Tier C).
 | 013 Enable on PDF / local files | Restricted pages degrade to no-zoom. | ROADMAP (VT-4, file:// only; PDF documented) |
 | 014 Exclude / disable on listed sites | Done: `x:` Exclude + `p:` Pause + `cfg:off` global. | DONE |
 | 015 Toolbar button click action | Always opens the popup (not configurable). | DECLINE |
-| ZL-001..016 Zoom-level values (30%-500%) | Ladder spans 25%-500% (17 steps); 8-button preset grid; Options accepts any 25-500. | ROADMAP (VT-8 decision; VT-7 custom entry) |
+| ZL-001..016 Zoom-level values (30%-500%) | Ladder spans 25%-500% (17 steps); 8-button preset grid; Options accepts any 5-500. | ROADMAP (VT-8 decision; VT-7 custom entry) |
 
 Net: 5 already shipped (001, 004, 006, 010, 014), plus three screenshot-only DONEs
 (AutoFit, CSS full zoom, on-button badge - see 2b). 8 roadmap tickets (VT-1..8),
@@ -128,7 +127,7 @@ low-effort polish; Tier C is the one strategic (scope-expanding) item.
 **Why.** Ctrl+Wheel is the universal "zoom this" gesture, and it is a uniquely
 clean fit for THIS architecture. We already disable browser zoom, so native
 Ctrl+Wheel is inert on every page; intercepting it to drive CSS zoom is the exact
-same trick the content script already uses for Ctrl +/-/0 (HANDOFF section 5),
+same trick the content script already uses for Ctrl +/-/0 (state-of-the-system/04-content-script.md),
 with the same payoff (no bubble, instant apply, per-site persistence). The old
 app's wheel zoom was a recurring bug source (buglist #29: RMB+wheel got "stuck,"
 trackpad pinch triggered text zoom), but every one of those bugs came from
@@ -164,8 +163,8 @@ naturally also covers pinch-zoom - a bonus, but test it for oversensitivity.
 
 #### VT-2: Optional "apply zoom to whole domain" (eTLD+1 grouping)
 - **Source:** old-app 006 / "treat domain and subdomains as separate sites" (the
-  inverse option); buglist #23 (per-site pattern syntax confusion); HANDOFF
-  backlog item 2 (already independently identified, OPEN).
+  inverse option); buglist #23 (per-site pattern syntax confusion); original engineering backlog
+  item 2 (already independently identified, OPEN).
 - **Type:** Feature
 - **Size:** M
 - **Priority:** Medium
@@ -255,7 +254,7 @@ should be split:
   opens saved pages or local docs.
 - **The built-in PDF viewer / chrome:// pages:** NOT feasible via CSS zoom. It is
   a restricted, embedded plugin surface where content scripts do not run and
-  `setZoomSettings` rejects (HANDOFF section 8). Document as a known limitation,
+  `setZoomSettings` rejects (state-of-the-system/01-architecture-and-design.md, "Known edge cases"). Document as a known limitation,
   do not attempt.
 
 **Scope / approach.** Confirm the manifest match patterns cover `file://` (or add
@@ -364,7 +363,7 @@ to a deliberately small extension. Keep it short and tied to existing logic.
 
 **Why.** The per-level investigation collapses to "we already offer the whole
 range" (VT-8 / section 5). The one genuine gap it surfaces is entry, not coverage:
-the Options page accepts any custom value (25-500), but the popup only offers 8
+the Options page accepts any custom value (5-500), but the popup only offers 8
 fixed presets plus the stepper ladder. A power user who wants, say, 138% from the
 popup has to use the Options page. A small editable percent field would close that
 without adding any new levels.
@@ -375,7 +374,8 @@ existing clamp/persist path. Keep the preset grid as the primary path.
 
 **Acceptance criteria.**
 - Typing a value in the popup sets and persists an arbitrary clamped factor.
-- Out-of-range entries clamp to `[0.25, 5.0]`.
+- Out-of-range entries clamp to the slider extents (`cfg:zoomMin`/`cfg:zoomMax`,
+  default 5%-400%; hard range `[0.05, 5.0]`).
 - A test covering the editable entry and clamping.
 
 **Risks / notes.** Minor. Do not expand the preset grid itself (the ladder +
@@ -401,7 +401,7 @@ decision: what level menu do we offer. The current ladder (`ZOOM_STEPS` in
 
 This already covers every value the old app offered (it used 30% where we use
 33%, and we additionally offer 25%), and the Options page accepts any custom value
-25-500. The popup preset grid (`PRESETS` in `popup.js`) exposes 8 of them (75, 90,
+5-500. The popup preset grid (`PRESETS` in `popup.js`) exposes 8 of them (75, 90,
 100, 110, 125, 150, 175, 200). So there is no per-value work to do - just confirm
 the set and close the 16 tickets as a group.
 
@@ -411,11 +411,11 @@ the set and close the 16 tickets as a group.
    clamp. (The old app's sub-25% bug is buglist #30 - not something to reproduce.)
 2. Preset grid: is the 8-value comfort range right, or add a couple (e.g. 50%,
    250%)? (Custom free entry is VT-7, not here.)
-3. Top end: 500% is fine to keep; confirm clamp `[0.25, 5.0]` is the intended
+3. Top end: 500% is fine to keep; confirm the hard clamp `[0.05, 5.0]` is the intended
    ceiling.
 
 **Acceptance criteria.**
-- One short decision note (in HANDOFF or this doc) recording the chosen floor,
+- One short decision note (in this doc) recording the chosen floor,
   preset set, and ceiling, with reasons - replacing the 16 per-value
   investigations.
 - Any change to `ZOOM_STEPS` / `PRESETS` / clamps is consistent across popup,
@@ -444,8 +444,8 @@ genuine accessibility feature: some users want larger TEXT without reflowing the
 whole layout. BUT it is a different axis from full-page zoom: it adds a second
 zoom dimension, a second per-site value, more UI, and a class of layout-breakage
 the current app deliberately avoids. CSS-based text zoom (scaling font-size, or a
-min-font-size pass) is breakage-prone in a way full-page `zoom` is not. HANDOFF
-section 1 lists text zoom as an explicit non-goal ("scoped to the one feature the
+min-font-size pass) is breakage-prone in a way full-page `zoom` is not. The original design brief
+listed text zoom as an explicit non-goal ("scoped to the one feature the
 author actually uses"). So this is not a quick win - it is a decision about
 whether Zoom Page TL stays a focused full-page tool or grows into a general
 accessibility/readability tool. Treat it as a SPIKE first.
@@ -476,13 +476,13 @@ app small and true to its design. Documented so the decision is not re-litigated
 - **003 Zoom mode: Browser** (incl. screenshot "Let browser manage per-site full
   zoom" / "Use CSS full zoom instead of browser full zoom"). The entire reason this
   app exists is to avoid browser zoom: any `chrome.tabs.setZoom` call flashes the
-  native zoom bubble (HANDOFF section 3.1), and we pin browser zoom to `disabled`.
+  native zoom bubble (state-of-the-system/01-architecture-and-design.md), and we pin browser zoom to `disabled`.
   The legitimate need behind it ("on THIS site I want normal browser zoom") is
   already served by Pause and Exclude, which hand the tab back to `"automatic"` and
   let native Ctrl +/- work. Re-adding a browser-zoom mode would reintroduce the bug
   the rewrite was built to kill. Decline.
 - **007 Set zoom per tab.** Conflicts with the per-site mental model and storage
-  design, was an explicit v1 non-goal (HANDOFF section 1), and serves a niche
+  design, was an explicit v1 non-goal (AGENTS.md, "What this product is"), and serves a niche
   (buglist #24 was just docs confusion about whether it existed). Per-tab state is
   also awkward under the MV3 ephemeral-worker design, and Chrome's per-tab zoom
   routes through the bubble-prone API. If a "temporary, this-tab-only, not
@@ -537,29 +537,40 @@ does not need 16 separate tickets. The current `ZOOM_STEPS` ladder is:
 
 This already covers every value the old app offered (it used 30% where we use 33%,
 and we additionally offer 25%), and the Options page accepts any custom value from
-25% to 500%. So:
+5% to 500%. So:
 
 - **Coverage:** KEEP all levels. There is no missing or redundant step worth
   changing; the ladder is a reasonable geometric progression around the 100%
   anchor.
-- **Floor:** Our floor is 25% (matching the old app's effective floor; the old
-  app's sub-25% bug was buglist #30 - not something to reproduce).
+- **Floor:** The keyboard/stepper ladder bottoms out at 25%, but the hard clamp
+  and the popup slider reach 5% (widened with the slider). VT-8 should record
+  whether that split is intended. (The old app's floor bug was buglist #30.)
 - **Actionable items:** the level-menu confirmation/decision is VT-8; the only
   genuine feature gap (entry convenience in the popup) is VT-7. No per-level
   add/remove tickets are recommended.
 
 ---
 
-## 6. Adjacent items (not from the old-app feature list)
+## 6. Carried from the original engineering backlog
 
-For completeness, two items already on our own backlog that relate to "per-site
-memory" but are not old-app options, so they are not ticketed here:
+Items from the first design brief that are not old-app options, kept here so the
+backlog has one home:
 
-- **storage.sync** (HANDOFF backlog item 5, OPEN): sync per-site levels across the
-  user's signed-in Chrome instances. Adjacent to old-app 006 / VT-2.
-- **Zero-flash hardening** (HANDOFF backlog item 6, PARTLY ADDRESSED): relevant if
-  first-paint flash is ever observed; see HANDOFF for why the obvious approaches
-  were reverted.
+- **storage.sync** [S], OPEN: sync per-site levels across the user's signed-in
+  Chrome instances. Watch the small sync quota; keep local as the source of truth
+  and mirror, or make it a toggle. Adjacent to old-app 006 / VT-2.
+- **Zero-flash hardening** [M], PARTLY ADDRESSED: the content-script re-assert
+  fixed the observed case (cnn.com re-rendering and dropping the inline zoom). A
+  service-worker pre-paint stylesheet was tried and reverted (it raced the content
+  script and left stale `:root{zoom}` rules behind a reset to 100%). If revisited,
+  do it as a content-script-owned stylesheet, or change how 100% is represented,
+  with behavioral tests. See state-of-the-system/01-architecture-and-design.md.
+- **Durable persistence regression test** [S], OPEN: incognito + browser restart +
+  new tab (triage #26).
+- **CSS-zoom site-compat: cursor/hit offset** [M], OPEN: map and overlay UIs at
+  non-100% zoom (triage #10, #32).
+- **Export Auto (`af:`) in JSON backup** [S], OPEN: Exclude is exported; Auto and
+  Re-center are not.
 
 ---
 
@@ -586,10 +597,11 @@ Everything in section 4 stays declined unless a specific user ask reopens it.
 ## 8. How to turn these into real tickets
 
 1. Pick a VT to promote.
-2. `/ticket-new "<title>"` (or `/tn`), then paste the body (Why / Scope /
-   Acceptance / Risks) into the ticket.
+2. If the owner sets up a tracker for this repo (`build init`), create the ticket
+   with the `build` CLI and paste the body (Why / Scope / Acceptance / Risks).
+   Until then, implement directly from the VT and mark it DONE here.
 3. Set size and priority from the VT header.
-4. For VT-1 (wheel zoom) read buglist #7 and #29 first - they are the failure modes
+4. For VT-1 (wheel zoom) read triage #7 and #29 first - they are the failure modes
    to design around.
 5. VT-8 can be closed as a single decision note rather than 16 separate
    investigations.
@@ -601,8 +613,8 @@ real, repeated config friction.
 
 ---
 
-_Sources: the two `old-app-feature-list-*.md` docs (which enumerate ZPWE's
-investigation tickets and zoom levels), the triaged `chrome-web-store-buglist.md`,
+_Sources: the two retired old-app investigation stubs (ZPWE's 15 option features
+and 16 zoom levels; see git history), the triaged `zpwe-feedback-triage.md`,
 the current `extension/` source, and a reference screenshot of ZPWE's General
 options tab supplied by the author. The screenshot is reconciled in section 2b;
 every option it shows is accounted for there. If a later screenshot of the Zoom

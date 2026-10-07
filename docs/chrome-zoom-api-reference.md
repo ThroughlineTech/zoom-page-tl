@@ -62,8 +62,18 @@ script so it does not depend on the worker being alive.
 ## Keyboard commands
 
 Chrome reserves `Ctrl` with `+`, `-`, and `0` for browser zoom; extensions cannot bind
-them. This project uses `Alt+Shift+Up / Down / 0`, rebindable at
-`chrome://extensions/shortcuts`.
+them as commands. This project exposes two paths:
+
+- `Alt+Shift+Up / Down / 0` are real `commands`, rebindable at
+  `chrome://extensions/shortcuts` and handled in the service worker.
+- `Ctrl +/-/0` are intercepted by the content script (`keydown`, capture phase,
+  `preventDefault`). This works because browser zoom is `disabled`, so the native
+  keys are otherwise inert. They are page-level handling, not rebindable, and they
+  do not fire on pages where content scripts cannot run.
+
+Only 4 commands may carry a `suggested_key`. Three are used (zoom in/out/reset);
+`zoom-autofit` and `toggle-global` are declared without one, so users bind them by
+hand.
 
 ## Sources
 
