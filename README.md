@@ -5,7 +5,7 @@ Chrome's native zoom bubble. It applies zoom with the CSS `zoom` property and ke
 browser zoom disabled so the omnibox indicator can never appear.
 
 Independent rewrite, in spirit, of "Zoom Page WE" by DW-dev, scoped to per-site full
-zoom only. Version 1.0.0, packaged for the Chrome Web Store. Contributors and coding
+zoom only. Version 1.1.0, packaged for the Chrome Web Store. Contributors and coding
 agents start at [AGENTS.md](AGENTS.md); current behavior is documented in
 [docs/state-of-the-system/](docs/state-of-the-system/00-README.md).
 
@@ -37,11 +37,17 @@ agents start at [AGENTS.md](AGENTS.md); current behavior is documented in
   layout shifts as they load. While Auto is on, the manual zoom numbers grey out because
   the zoom is being managed for you; any manual zoom (or clicking "Fit") turns Auto back
   off and locks the level. You can also toggle Auto per site in Options.
-- Keyboard: `Ctrl +` zoom in, `Ctrl -` zoom out, `Ctrl 0` reset (the familiar zoom
-  keys keep working - they drive this extension's per-site zoom, with no zoom bubble).
-  `Alt+Shift+Up / Down / 0` do the same and are rebindable at
-  `chrome://extensions/shortcuts`; AutoFit and the global on/off both have commands
-  there with no default key (bind them yourself if you want a hotkey).
+- Keyboard: `Ctrl +` zoom in, `Ctrl -` zoom out, `Ctrl 0` reset to 100% (the familiar
+  zoom keys keep working - they drive this extension's per-site zoom, with no zoom
+  bubble). Every page shortcut is configurable in Options > Keyboard shortcuts: turn
+  the extension on/off everywhere, zoom in, zoom out, reset to 100%, back to the default
+  zoom, Fit and Auto. Click a shortcut and press any chord (for example Ctrl+Alt+[);
+  each can be switched off, no two can be the same, keys Chrome keeps for itself (like
+  Ctrl+T) are refused, and keys Chrome uses but lets a page take over (like Ctrl+F) are
+  allowed with a warning. Page shortcuts work on web pages but not on chrome:// pages,
+  the Web Store or the PDF viewer. For those, `Alt+Shift+Up / Down / 0` and the
+  AutoFit and on/off commands are Chrome-level shortcuts, rebindable at
+  `chrome://extensions/shortcuts` (the last two have no default key).
 - "Re-center when zoomed" (popup, also a per-site "Center" button in Options) is an
   opt-in fix for sites whose content slides off to the side and gets clipped as you zoom
   in - some sites size their page wrappers to the full window in a way the browser does
@@ -61,10 +67,12 @@ agents start at [AGENTS.md](AGENTS.md); current behavior is documented in
   at `chrome://extensions/shortcuts`.
 - The toolbar badge shows the current site's zoom percent.
 - "Options" (popup footer, or the extension's options page) lets you set a global
-  default zoom for new sites, set the zoom slider's range (min/max), and manage every
+  default zoom for new sites (a site set to that same level follows the default; any
+  other level, including 100%, stays fixed for that site), set the zoom slider's range
+  (min/max), configure keyboard shortcuts, and manage every
   saved site in two lists: Active (edit its level, pause/resume it, or exclude it) and
-  Excluded (include it again, or remove it). Export/import your levels and exclude list
-  as JSON. Sites you paused or excluded from the popup show up here too, so you can
+  Excluded (include it again, or remove it). Export/import your levels, exclude list and
+  shortcuts as JSON. Sites you paused or excluded from the popup show up here too, so you can
   manage them without revisiting the page.
 
 ## Layout

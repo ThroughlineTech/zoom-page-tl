@@ -1,7 +1,7 @@
 # Chrome Web Store listing - Zoom Page TL
 
-Everything to paste into the Developer Dashboard for the v1.0.0 submission. Decisions:
-Category = Accessibility, Visibility = Public, Version = 1.0.0.
+Everything to paste into the Developer Dashboard. Current package: v1.1.0 (adds
+configurable keyboard shortcuts). Decisions: Category = Accessibility, Visibility = Public.
 
 ---
 
@@ -41,8 +41,9 @@ FEATURES
 - Type an exact percentage, or nudge by 1% with the arrow keys.
 - Fit-to-width: size a page to your window in one click. Optional Auto mode re-fits a
   site every time it loads.
-- Keyboard shortcuts: the familiar Ctrl + / - / 0 keep working (no zoom bubble), plus
-  rebindable Alt+Shift shortcuts.
+- Keyboard shortcuts: the familiar Ctrl + / - / 0 keep working (no zoom bubble). Set
+  your own shortcuts (any chord, like Ctrl+Alt+[) for on/off, zoom in/out, reset,
+  default zoom, Fit and Auto, plus rebindable Alt+Shift shortcuts.
 - A global default zoom for sites you have not customized.
 - Pause or Exclude any site that misbehaves under zoom - it hands control back to the
   browser for that site.
@@ -80,7 +81,7 @@ Chrome's native zoom popup never appears.
 - `storage`
   ```
   Saves the user's per-site zoom levels and preferences (default zoom, paused/excluded/
-  auto-fit/re-center flags, slider range) locally on the device. Nothing is transmitted.
+  auto-fit/re-center flags, slider range, keyboard shortcuts) locally on the device. Nothing is transmitted.
   ```
 
 - `tabs`
@@ -132,13 +133,15 @@ https://github.com/ThroughlineTech/zoom-page-tl/blob/main/PRIVACY.md
 
 ## Package
 
-- Upload `dist/zoom_page_tl-1.0.0.zip` (built by `npm run build`).
+- Upload `dist/zoom_page_tl-1.1.0.zip` (built by `npm run build`).
 - The manifest is at the TOP LEVEL of the zip (verified) - do not re-zip it into a
   subfolder.
 
 ## Submission steps (dashboard)
 
-1. chromewebstore.google.com/devconsole -> New item -> upload `dist/zoom_page_tl-1.0.0.zip`.
+1. chromewebstore.google.com/devconsole -> New item (first submission) or open the
+   existing item -> Package -> Upload new package (an update) -> upload
+   `dist/zoom_page_tl-1.1.0.zip`.
 2. Store listing tab: paste Name, Summary, Detailed description, Single purpose; set
    Category = Accessibility, Language = English (US); upload the 3 screenshots and the
    128x128 icon if prompted.

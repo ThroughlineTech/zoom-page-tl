@@ -15,6 +15,7 @@
     --accent: #2563eb;
     --accent-fg: #ffffff;
     --danger: #b91c1c;
+    --warn: #b45309;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -26,6 +27,7 @@
       --btn-hover: #3a3a41;
       --accent: #3b82f6;
       --danger: #f87171;
+      --warn: #fbbf24;
     }
   }
   * { box-sizing: border-box; }
@@ -108,6 +110,26 @@
   .scroll { max-height: 320px; overflow-y: auto; scrollbar-gutter: stable; }
   .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .status { color: var(--muted); font-size: 12px; min-height: 16px; margin-top: 8px; }
+  /* Keyboard shortcuts table. */
+  table.keys col.c-kon { width: 44px; }
+  table.keys col.c-kname { width: 190px; }
+  td.kon { text-align: center; }
+  td.kkey button.chord {
+    min-width: 140px;
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  td.kkey button.chord.unset,
+  td.kkey button.chord.off { color: var(--muted); }
+  td.kkey button.chord.recording {
+    border-color: var(--accent);
+    color: var(--accent);
+    outline: 2px solid var(--accent);
+  }
+  td.kkey button.kdef { margin-left: 6px; font-size: 12px; padding: 6px 8px; }
+  .knote { font-size: 12px; margin-top: 4px; }
+  .knote:empty { display: none; }
+  .knote.error { color: var(--danger); }
+  .knote.warn { color: var(--warn); }
   .brand { margin-top: 22px; text-align: center; color: var(--muted); font-size: 12px; }
   .brand a { color: var(--accent); text-decoration: none; }
   .brand a:hover { text-decoration: underline; }
@@ -122,8 +144,9 @@
   <section>
     <h2>Default zoom for new sites</h2>
     <p class="hint">
-      Sites you have not customized use this level. A site left at 100% follows
-      this default; set a site explicitly in the list below to override it.
+      Sites you have not customized use this level. Setting a site to this same
+      level makes it follow the default again; any other level - including 100% -
+      stays fixed for that site.
     </p>
     <div class="row">
       <label>
@@ -148,6 +171,36 @@
       </label>
       <button id="zoomRangeReset">Reset to 5-400%</button>
     </div>
+  </section>
+
+  <section>
+    <h2>Keyboard shortcuts</h2>
+    <p class="hint">
+      Click a shortcut, then press the keys you want - for example Ctrl+Alt+[.
+      Esc cancels, Backspace clears. A shortcut needs Ctrl, Alt or Cmd (or a
+      function key), and no two can be the same. Shortcuts Chrome keeps for
+      itself (like Ctrl+T) are refused; ones Chrome uses but lets a page take
+      over (like Ctrl+F) are allowed with a warning. They work on web pages, not
+      on chrome:// pages, the Chrome Web Store or the PDF viewer.
+    </p>
+    <table class="keys">
+      <colgroup><col class="c-kname" /><col class="c-kon" /><col /></colgroup>
+      <thead><tr><th>Action</th><th>On</th><th>Shortcut</th></tr></thead>
+      <tbody id="keys"></tbody>
+    </table>
+    <div class="row" style="margin-top: 10px">
+      <button id="keysReset">Reset all shortcuts</button>
+    </div>
+    <p class="hint" style="margin-top: 12px">
+      Chrome-level shortcuts for this extension also work outside web pages and
+      are set in
+      <a href="#" id="chromeShortcuts">chrome://extensions/shortcuts</a>.
+      Current: <span id="cmdList"></span>
+    </p>
+    <p class="hint">
+      Another extension's shortcuts cannot be seen from here; if one uses the same
+      keys, Chrome gives them to that extension first.
+    </p>
   </section>
 
   <section>

@@ -10,7 +10,7 @@
 
 | Dependency | Used by | Specific surface | When missing |
 | --- | --- | --- | --- |
-| Chrome extension APIs | `extension/*` | `storage.local` + `onChanged`; `tabs.setZoomSettings`, `query`, `get`, `sendMessage`, `onUpdated`, `onActivated`; `action.setBadgeText`, `setBadgeBackgroundColor`, `setIcon`; `commands.onCommand`; `runtime.onMessage`, `openOptionsPage` | Restricted pages reject; all such calls are wrapped and swallowed (e.g. `extension/background.js:107-109`, `extension/content.js:82-84`). |
+| Chrome extension APIs | `extension/*` | `storage.local` + `onChanged`; `tabs.setZoomSettings`, `query`, `get`, `sendMessage`, `onUpdated`, `onActivated`; `action.setBadgeText`, `setBadgeBackgroundColor`, `setIcon`; `commands.onCommand`; `runtime.onMessage`, `openOptionsPage` | Restricted pages reject; all such calls are wrapped and swallowed (e.g. `extension/background.js:112-114`, `extension/content.js:95-97`). |
 | `@playwright/test` | tests, all `scripts/dev-*.js`, `scripts/make-off-icons.js` | `chromium.launchPersistentContext`, `connectOverCDP`, `launch` | `npm test` / `npm run dev` fail at `require`. |
 | `web-ext` | `npm start`, `npm run build` (`package.json:13-14`) | `web-ext run -t chromium`, `web-ext build` | Those two scripts fail; lint/test unaffected. |
 | Standalone Chromium (optional) | dev browser | Executable path | Falls back to `channel: "chromium"` (`scripts/dev-lib.js:32`). |
@@ -41,7 +41,7 @@ Unpacked extensions get a path-derived id, so the same `extension/` folder loade
 
 ## Release and store packaging
 
-- The version lives in two places that must move together: `extension/manifest.json:4` and `package.json:3` (both `1.0.0`). `web-ext build` names the zip from the manifest.
+- The version lives in two places that must move together: `extension/manifest.json:4` and `package.json:3` (both `1.1.0`). `web-ext build` names the zip from the manifest.
 - `npm run build` produces the store upload; the manifest sits at the zip root.
 - Submission content is prepared in [store/listing.md](../../store/listing.md): name, summary, description, single purpose, category Accessibility, permission justifications, data-use certifications and the privacy policy URL (`https://github.com/ThroughlineTech/zoom-page-tl/blob/main/PRIVACY.md`). Screenshots are in `store/screenshots/` (3 PNGs).
 - Submission itself is a manual step in the Chrome Web Store Developer Dashboard. Whether 1.0.0 has been submitted or approved is not recorded in the repository.

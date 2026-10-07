@@ -159,3 +159,4 @@ Evolution: first run (2026-10-07). It replaced three retired engineering handoff
 | Date | Branch / HEAD | Notes |
 | --- | --- | --- |
 | 2026-10-07 | main / 8ec5470 (plus uncommitted docs restructure) | First run. lint OK, 64/64 Playwright tests passed. Found: popup ignores cfg:defaultZoom; replace-import leaves af:/rc:/p: orphans; two stale code comments in content.js. Corrected roadmap clamp/range facts, the API reference keyboard section and the README layout. |
+| 2026-10-07 | main / 1f458ed + uncommitted shortcuts change | Partial refresh (not a full re-run of the prompt): configurable keyboard shortcuts (`cfg:keys`), the "default is absence" level rule, the popup default-zoom fix and the two stale comments. Citations remapped mechanically from `git diff` and rewritten where behavior changed. lint OK, 78/78 tests passed. |

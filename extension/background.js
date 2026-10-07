@@ -64,11 +64,16 @@ async function getFactor(host) {
   return 1.0;
 }
 
+// A level equal to the global default is stored as no key (the site follows the
+// default); any other level, including 100% while the default differs, is pinned.
 async function setFactor(host, factor) {
   if (!host) return;
   const key = "z:" + host;
-  if (!factor || Math.abs(factor - 1.0) < 1e-6) {
-    await chrome.storage.local.remove(key); // 100% => store nothing
+  const res = await chrome.storage.local.get(DEFAULT_KEY);
+  const def = res[DEFAULT_KEY] != null ? res[DEFAULT_KEY] : 1.0;
+  if (!factor) factor = 1.0;
+  if (Math.abs(factor - def) < 1e-6) {
+    await chrome.storage.local.remove(key); // at the default => store nothing
   } else {
     await chrome.storage.local.set({ [key]: factor });
   }

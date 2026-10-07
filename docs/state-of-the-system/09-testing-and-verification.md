@@ -1,11 +1,13 @@
 # 09 - Testing and verification
 
-## Results for this refresh (2026-10-07, HEAD `8ec5470`)
+## Results for this refresh (2026-10-07, keyboard shortcuts change)
 
-Run on Windows 11, Node v24.11.1, after a fresh `npm install` and `npx playwright install chromium`, with no dev browser running:
+Run on Windows 11, Node v24.11.1, with no dev browser running:
 
 - `npm run lint`: `OK: extension static check passed (7 JS files, 12 icons, manifest v3).`
-- `npx playwright test`: **64 passed** (3.4 minutes). No failures, skips or flakes.
+- `npx playwright test`: **78 passed** (3.3 minutes; 64 existing + 14 in `tests/shortcuts.spec.js`). No failures, skips or flakes.
+
+The first run of the day, before the change (HEAD `8ec5470`), passed 64/64.
 
 ## Harness design
 
@@ -27,6 +29,7 @@ Run on Windows 11, Node v24.11.1, after a fresh `npm install` and `npx playwrigh
 | `tests/global.spec.js` | 4 | Master switch un-zooms, live toggle restores, hands zoom back and shows "off", independence from per-site exclude. |
 | `tests/recenter.spec.js` | 4 | Re-center pulls column to center, off clears, inert at 100%, inert while excluded. |
 | `tests/slider.spec.js` | 7 | Log map round trip, snap well, `previewZoom` without storage write, preview ignored when suppressed, 5% end to end, extents default/round-trip, extents validation. |
+| `tests/shortcuts.spec.js` | 14 | Chord rules (modifiers, duplicates and numpad twins, Chrome-reserved, Chrome-used warnings, this extension's commands via the real `chrome.commands.getAll()`), on/off shortcut including while off, switched-off and rebound shortcuts, Ctrl++ and numpad aliases, Fit, Auto, Back to default, Reset pinning 100% under a 125% default, suppression, options recording UI, backup round trip, popup showing the default for an un-customized site. |
 | `tests/options.spec.js` | 17 | Export/import round trip, excluded export, replace semantics, merge vs replace, import clamping, default zoom resolution, default-aware commands and badge, `listSites`, Auto toggle UI, footer links, site links, level edit/remove UI, exclude/include/pause/resume UI, `removeSite`, default field. |
 
 ## What automation cannot reach (always manual)
@@ -43,16 +46,16 @@ Run on Windows 11, Node v24.11.1, after a fresh `npm install` and `npx playwrigh
 2. Set a real site to 150% in the popup; page reflows, no native bubble; reload applies before paint.
 3. A second site stays independent; the badge tracks the active tab.
 4. Alt+Shift+Up/Down/0 and Ctrl +/-/0 (including numpad) step and reset with no bubble.
-5. `chrome://settings`: nothing harmful, no worker errors.
-6. Fit on a too-wide page shrinks; on a letterboxed site (e.g. washingtonpost.com) enlarges; on a fluid site shows "Already fits the width".
-7. Pause and Exclude: page drops to 100%, badge "off", native Ctrl +/- and its bubble return; clearing restores the level.
-8. Master switch off: every tab at 100%, icon greyed; back on restores each site.
-9. Options: default zoom applies to un-customized sites; Export then Import (merge and replace) restores levels.
-10. Re-center on a drifting site (washingtonpost.com at 150%+): column returns to center and stays put while scrolling.
+5. Options > Keyboard shortcuts: record Ctrl+Alt+[ for on/off, then use it on a real page to turn the extension off and on again. Try Ctrl+T (refused) and Ctrl+F (warned). Confirm the popup's power-switch tooltip shows the chord.
+6. `chrome://settings`: nothing harmful, no worker errors.
+7. Fit on a too-wide page shrinks; on a letterboxed site (e.g. washingtonpost.com) enlarges; on a fluid site shows "Already fits the width".
+8. Pause and Exclude: page drops to 100%, badge "off", native Ctrl +/- and its bubble return; clearing restores the level.
+9. Master switch off: every tab at 100%, icon greyed; back on restores each site.
+10. Options: default zoom applies to un-customized sites; Export then Import (merge and replace) restores levels.
+11. Re-center on a drifting site (washingtonpost.com at 150%+): column returns to center and stays put while scrolling.
 
 ## Loose ends
 
-- No test asserts the popup's displayed percent on an un-customized site with a non-100% default; that is how the popup default bug in [03](03-storage-and-state.md) went unnoticed.
 - No incognito, browser-restart or multi-window tests.
 - No test for replace-import leaving `af:`/`rc:`/`p:` orphans.
 - No CI; the suite runs only when someone runs it locally.

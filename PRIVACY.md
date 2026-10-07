@@ -1,6 +1,6 @@
 # Privacy Policy - Zoom Page TL
 
-_Last updated: 2026-06-06_
+_Last updated: 2026-10-07_
 
 Zoom Page TL is a Chrome extension that applies per-site full-page zoom. This policy
 explains what it does and does not do with your data. The short version: it collects
@@ -15,6 +15,7 @@ browser's `chrome.storage.local` API. This includes:
 - A global default zoom level.
 - Per-site flags you set yourself: paused, excluded, auto-fit, and re-center.
 - The zoom slider's min/max range.
+- Your keyboard shortcut settings.
 
 That is the complete list. The data never leaves your device.
 

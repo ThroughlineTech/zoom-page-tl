@@ -15,6 +15,7 @@ const TICK_LABELS = new Set([0.5, 1.0, 1.5, 2.0, 4.0]);
 let currentTab = null;
 let currentHost = "";
 let currentFactor = 1.0;
+let currentDefault = 1.0; // cfg:defaultZoom - what a site with no z: key renders at
 let currentGlobalOff = false; // cfg:off - master switch, off on every site
 let currentExcluded = false; // x:<host> - never zoom this site
 let currentPaused = false; // p:<host> - zoom suspended for now (resume later)
@@ -143,7 +144,9 @@ async function persist() {
   // A manually chosen level is fixed: leave auto mode.
   currentAuto = false;
   await chrome.storage.local.remove("af:" + currentHost);
-  if (Math.abs(currentFactor - 1.0) < 1e-6) {
+  // At the global default => no key (the site follows the default); any other
+  // level, including 100% while the default differs, is pinned for this site.
+  if (sameFactor(currentFactor, currentDefault)) {
     await chrome.storage.local.remove(key);
   } else {
     await chrome.storage.local.set({ [key]: currentFactor });
@@ -382,6 +385,26 @@ document.getElementById("options").addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
 
+// Append each enabled keyboard shortcut to its control's tooltip, so they are
+// discoverable from the popup (they are set in Options).
+function showShortcutHints(map) {
+  const targets = {
+    toggle: "power",
+    zoomIn: "in",
+    zoomOut: "out",
+    reset: "reset",
+    fit: "fit",
+    auto: "auto",
+  };
+  for (const id in targets) {
+    const b = map[id];
+    if (!b || !b.on || !b.chord) continue;
+    const el = document.getElementById(targets[id]);
+    const host = el.closest("label") || el;
+    host.title = (host.title ? host.title + " " : "") + "(" + chordLabel(b.chord) + ")";
+  }
+}
+
 // A stored slider extent, clamped to the hard safety range; falls back to the
 // default when missing or invalid.
 function sanitizeBound(v, fallback) {
@@ -400,7 +423,7 @@ function sanitizeBound(v, fallback) {
     currentHost = "";
   }
   // cfg:off and the slider extents are host-independent.
-  const keys = ["cfg:off", "cfg:zoomMin", "cfg:zoomMax"];
+  const keys = ["cfg:off", "cfg:zoomMin", "cfg:zoomMax", "cfg:defaultZoom", KEYS_KEY];
   if (currentHost) {
     keys.push(
       hostKey(currentHost),
@@ -418,13 +441,19 @@ function sanitizeBound(v, fallback) {
     zoomMin = ZOOM_MIN_DEFAULT; // incoherent extents: fall back to the defaults
     zoomMax = ZOOM_MAX_DEFAULT;
   }
+  const def = Number(res["cfg:defaultZoom"]);
+  currentDefault = isFinite(def) && def > 0 ? def : 1.0;
   if (currentHost) {
-    currentFactor = res[hostKey(currentHost)] || 1.0;
+    // The site's own level if set, else the global default - the same
+    // resolution content.js uses, so the popup shows what the page renders at.
+    const own = res[hostKey(currentHost)];
+    currentFactor = own != null ? own : currentDefault;
     currentExcluded = !!res["x:" + currentHost];
     currentPaused = !!res["p:" + currentHost];
     currentAuto = !!res["af:" + currentHost];
     currentRecenter = !!res["rc:" + currentHost];
   }
+  showShortcutHints(normalizeShortcuts(res[KEYS_KEY]));
   buildTicks();
   render();
 })();

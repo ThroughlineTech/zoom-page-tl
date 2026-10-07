@@ -34,6 +34,9 @@
   let suppressed = false;
   let autoMode = false;
   let desired = 1.0;
+  // Configurable keyboard shortcuts (cfg:keys, see zoom.js): chordKey -> action.
+  // Starts at the defaults so Ctrl +/-/0 work before the first storage read.
+  let shortcuts = shortcutLookup(normalizeShortcuts(null));
   // Re-center (rc:<host>, opt-in): some sites size full-bleed wrappers to the device
   // viewport (100vw / min-width:100vw). Under CSS `zoom` those wrappers do NOT shrink
   // (Chromium resolves vw against the un-zoomed viewport), so content centered inside
@@ -66,9 +69,19 @@
   function refresh() {
     try {
       chrome.storage.local.get(
-        [key, DEFAULT_KEY, GLOBAL_OFF_KEY, excludedKey, pausedKey, autoKey, recenterKey],
+        [
+          key,
+          DEFAULT_KEY,
+          GLOBAL_OFF_KEY,
+          excludedKey,
+          pausedKey,
+          autoKey,
+          recenterKey,
+          KEYS_KEY,
+        ],
         (res) => {
           if (chrome.runtime.lastError) return;
+          shortcuts = shortcutLookup(normalizeShortcuts(res[KEYS_KEY]));
           suppressed =
             !!res[GLOBAL_OFF_KEY] || !!res[excludedKey] || !!res[pausedKey];
           autoMode = !suppressed && !!res[autoKey];
@@ -101,7 +114,8 @@
         changes[excludedKey] ||
         changes[pausedKey] ||
         changes[autoKey] ||
-        changes[recenterKey]
+        changes[recenterKey] ||
+        changes[KEYS_KEY]
       ) {
         refresh();
       }
@@ -289,7 +303,7 @@
     }, 150);
   }
 
-  // AutoFit-to-width. Three regimes (see HANDOFF section 9): a centered content
+  // AutoFit-to-width. Three regimes (see docs/state-of-the-system/04): a centered content
   // column narrower than the viewport enlarges to fill it (the common case); a
   // genuinely-too-wide block shrinks to fit; a fluid edge-to-edge page already
   // fits at every zoom, so there is nothing to do. Returns { factor, fits } where
@@ -337,13 +351,15 @@
       GLOBAL_OFF_KEY,
       excludedKey,
       pausedKey,
+      DEFAULT_KEY,
     ]);
     if (st[GLOBAL_OFF_KEY] || st[excludedKey] || st[pausedKey])
       return { factor: 1, fits: true }; // suppressed; do nothing
     const { factor, fits } = computeAutofitFactor();
     apply(factor);
-    if (Math.abs(factor - 1.0) < 1e-6) {
-      await chrome.storage.local.remove(key); // 100% => store nothing
+    const def = st[DEFAULT_KEY] != null ? st[DEFAULT_KEY] : 1.0;
+    if (sameFactor(factor, def)) {
+      await chrome.storage.local.remove(key); // at the default => store nothing
     } else {
       await chrome.storage.local.set({ [key]: factor }); // fixed level until refit
     }
@@ -374,31 +390,62 @@
     /* ignore */
   }
 
-  // Ctrl +/-/0 zoom. Chrome reserves Ctrl with +, -, and 0 for browser zoom and
-  // will not let an extension bind them as commands; and because we keep browser
-  // zoom disabled, those keys are otherwise inert. So intercept them here and
-  // drive the same per-site CSS zoom ladder as the popup and the Alt+Shift
-  // commands (stepFrom comes from zoom.js, loaded before this script). We only
-  // write storage; the storage.onChanged handler above applies it, which also
-  // resolves the global default correctly when a reset removes the key.
-  function stepZoom(dir) {
+  // Keyboard shortcuts. The defaults are Ctrl +/-/0: Chrome reserves those for
+  // browser zoom and will not let an extension bind them as commands, and because
+  // we keep browser zoom disabled they are otherwise inert. Every shortcut is
+  // configurable (and can be switched off) in Options; see zoom.js. Handlers only
+  // write storage; the storage.onChanged handler above applies the result.
+  function store(get, fn) {
     try {
-      chrome.storage.local.get(
-        [key, DEFAULT_KEY, GLOBAL_OFF_KEY, excludedKey, pausedKey],
-        (res) => {
-          if (chrome.runtime.lastError) return;
-          if (res[GLOBAL_OFF_KEY] || res[excludedKey] || res[pausedKey]) return; // suppressed
-          const next = dir === 0 ? 1.0 : stepFrom(resolve(res), dir);
-          chrome.storage.local.remove(autoKey); // manual zoom -> leave auto mode
-          if (Math.abs(next - 1.0) < 1e-6) {
-            chrome.storage.local.remove(key); // 100% => store nothing
-          } else {
-            chrome.storage.local.set({ [key]: next });
-          }
-        }
-      );
+      chrome.storage.local.get(get, (res) => {
+        if (chrome.runtime.lastError) return;
+        fn(res);
+      });
     } catch (e) {
       /* extension context unavailable on some restricted pages */
+    }
+  }
+
+  // Step (dir +1/-1) along the ladder, or reset (dir 0) to 100%. A level equal
+  // to the global default is stored as no key; anything else (including 100%
+  // while the default differs) is pinned for this site.
+  function stepZoom(dir) {
+    store([key, DEFAULT_KEY, GLOBAL_OFF_KEY, excludedKey, pausedKey], (res) => {
+      if (res[GLOBAL_OFF_KEY] || res[excludedKey] || res[pausedKey]) return; // suppressed
+      const next = dir === 0 ? 1.0 : stepFrom(resolve(res), dir);
+      const def = res[DEFAULT_KEY] != null ? res[DEFAULT_KEY] : 1.0;
+      chrome.storage.local.remove(autoKey); // manual zoom -> leave auto mode
+      if (sameFactor(next, def)) {
+        chrome.storage.local.remove(key); // at the default => store nothing
+      } else {
+        chrome.storage.local.set({ [key]: next });
+      }
+    });
+  }
+
+  // Zoom shortcuts repeat while held; the toggles fire once per press.
+  const REPEATS = new Set(["zoomIn", "zoomOut"]);
+
+  function runShortcut(action) {
+    if (action === "zoomIn") stepZoom(1);
+    else if (action === "zoomOut") stepZoom(-1);
+    else if (action === "reset") stepZoom(0);
+    else if (action === "default") {
+      // Drop this site's own level (and Auto) so it follows the global default.
+      chrome.storage.local.remove([key, autoKey]);
+    } else if (action === "fit") {
+      // One-shot Fit, like the popup button: leave Auto, measure once.
+      chrome.storage.local.remove(autoKey).then(() => autofit()).catch(() => {});
+    } else if (action === "auto") {
+      store([autoKey], (res) => {
+        if (res[autoKey]) chrome.storage.local.remove(autoKey);
+        else chrome.storage.local.set({ [autoKey]: true }); // onChanged fits now
+      });
+    } else if (action === "toggle") {
+      store([GLOBAL_OFF_KEY], (res) => {
+        if (res[GLOBAL_OFF_KEY]) chrome.storage.local.remove(GLOBAL_OFF_KEY);
+        else chrome.storage.local.set({ [GLOBAL_OFF_KEY]: true });
+      });
     }
   }
 
@@ -406,19 +453,15 @@
     window.addEventListener(
       "keydown",
       (e) => {
-        // Excluded or paused on this site: do not touch the keys at all. Leaving
-        // them un-prevented lets Chrome's native Ctrl +/- (and its bubble) work.
-        if (suppressed) return;
-        // Require Ctrl, allow Shift (Ctrl++ is Ctrl+Shift+=), exclude Alt/Meta
-        // (Alt+Shift+* is the command set; Meta is OS-level).
-        if (!e.ctrlKey || e.altKey || e.metaKey) return;
-        let dir;
-        if (e.key === "+" || e.key === "=" || e.code === "NumpadAdd") dir = 1;
-        else if (e.key === "-" || e.key === "_" || e.code === "NumpadSubtract") dir = -1;
-        else if (e.key === "0" || e.code === "Numpad0") dir = 0;
-        else return;
+        const action = matchShortcut(shortcuts, e);
+        if (!action) return;
+        // Off, excluded or paused: leave every key alone (so Chrome's native
+        // Ctrl +/- and its bubble work) - except the on/off toggle itself, which
+        // must still work to turn the extension back on.
+        if (suppressed && action !== "toggle") return;
         e.preventDefault();
-        stepZoom(dir);
+        if (e.repeat && !REPEATS.has(action)) return;
+        runShortcut(action);
       },
       { capture: true }
     );
@@ -428,8 +471,9 @@
 
   // Resilience: some sites (e.g. cnn.com) re-render after load, clobbering the
   // inline zoom or replacing <html>. Re-assert the desired factor when that
-  // happens. (The service worker's pre-paint stylesheet is the first line of
-  // defense; this is the second.) The apply() guard keeps this from fighting the
+  // happens. (A service-worker pre-paint stylesheet was tried and reverted - it
+  // raced this script - so this is the only defense.) The apply() guard keeps
+  // this from fighting the
   // AutoFit measurement (apply() updates `desired`, so re-assert sees a match).
   function reassert() {
     if (suppressed) return;

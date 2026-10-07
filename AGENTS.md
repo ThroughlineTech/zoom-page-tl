@@ -28,7 +28,7 @@ Text-only zoom, per-tab zoom, subsite trees and image zoom are non-goals unless 
 
 - **Never call `chrome.tabs.setZoom`.** The no-bubble guarantee depends on browser zoom staying `disabled` and all zoom being CSS `zoom` on `<html>`. The only exception is suppressed sites (`cfg:off`, `x:`, `p:`), which are deliberately handed back to `"automatic"`.
 - **One actor owns the zoom on the page: `content.js`.** A service-worker pre-paint stylesheet was tried and reverted because two async actors raced. If you revisit zero-flash hardening, read the design doc first.
-- **100% is the absence of a key.** Setting any level to 100% removes `z:<host>` (and the same for `cfg:defaultZoom`, `cfg:zoomMin`, `cfg:zoomMax`). A site with no key follows the global default. Preserve this unless you are deliberately changing the model, with tests.
+- **The default is the absence of a key.** A site's level equal to the global default removes `z:<host>`, and the site follows the default; any other level, including 100% under a non-100% default, is stored. Every writer uses `sameFactor` from `zoom.js`. `cfg:defaultZoom`, `cfg:zoomMin`, `cfg:zoomMax` and `cfg:keys` are likewise absent at their own defaults. Preserve this unless you are deliberately changing the model, with tests.
 - **Keying is `location.hostname`.** Subdomains are independent; http and https share a key.
 - **The service worker is ephemeral.** Re-read `chrome.storage` on each event; hold no long-lived state.
 - **No remote code, no network requests, no telemetry.** PRIVACY.md and the store listing promise this. Any new permission or data category must update both, and is an owner decision.
@@ -39,13 +39,15 @@ Text-only zoom, per-tab zoom, subsite trees and image zoom are non-goals unless 
 
 Inspect the working tree. Preserve the owner's edits and other agents' work. State the change in one sentence: what the user does, what changes on the page, what they see next. For a bug, reproduce it first and, where it can be reduced to a localhost page, write a failing Playwright test before fixing it. Some site-specific bugs cannot be reduced; say which part is covered by automation and which only by a dev-browser screenshot or manual check.
 
-Implement the smallest complete change. Read before writing and match the surrounding style. Keep the per-host storage model and the 100%-means-absent convention.
+Implement the smallest complete change. Read before writing and match the surrounding style. Keep the per-host storage model and the default-means-absent convention.
 
 ## Prove it
 
 Every change gets at least one test that would fail without it, in the matching `tests/<topic>.spec.js` (or a new one). `npm run lint` and `npm test` must both pass before handing back. Do not hand back a red or skipped test without calling it out.
 
 **Do not run `npm test` while the dev browser is running.** The headed dev Chromium starves the runner and timing-sensitive tests flake, a different one each run. Stop the dev browser, run the suite clean, then relaunch. A genuine regression fails the same test every time in isolation; re-run a suspect alone before believing it.
+
+Keyboard-shortcut logic lives in `zoom.js` and is testable from the options page (`window.ZP` and the global helpers); press real keys on the test server for dispatch.
 
 The harness cannot reach the native zoom bubble itself (it asserts browser zoom `disabled` as the proxy), global hotkey dispatch (`chrome.commands`), real file dialogs, first-paint flash, or visual correctness on real sites. Those are always manual checks.
 

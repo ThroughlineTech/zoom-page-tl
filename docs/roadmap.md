@@ -65,7 +65,7 @@ Tier C).
 | 007 Set zoom per tab | Not supported. Explicit non-goal. | DECLINE |
 | 008 Mouse-wheel zoom (modifier) | Not supported. | ROADMAP (VT-1) |
 | 009 Wheel modifier key choice | Not supported. | ROADMAP (folded into VT-1) |
-| 010 Keyboard shortcuts to zoom | Ctrl +/-/0 intercept + Alt+Shift+Up/Down/0 commands (rebindable). | DONE (+ VT-5 refinement) |
+| 010 Keyboard shortcuts to zoom | Configurable page shortcuts (default Ctrl +/-/0) + Alt+Shift+Up/Down/0 commands (rebindable). | DONE (incl. VT-5 refinement) |
 | 011 Zoom images only | Not supported. Non-goal; historically buggy in ZPWE. | DECLINE |
 | 012 Zoom-level indicator / notification | Toolbar badge shows percent. No on-page indicator. | ROADMAP (VT-3) |
 | 013 Enable on PDF / local files | Restricted pages degrade to no-zoom. | ROADMAP (VT-4, file:// only; PDF documented) |
@@ -278,7 +278,15 @@ closes a recurring "why no zoom here" question.
 
 ---
 
-#### VT-5: Keyboard shortcuts - make the Ctrl +/-/0 intercept optional, and surface remapping
+#### VT-5: Keyboard shortcuts - make the Ctrl +/-/0 intercept optional, and surface remapping [DONE 2026-10-07]
+
+> DONE. Options > Keyboard shortcuts makes every page shortcut (on/off, zoom in/out,
+> reset, back to default, Fit, Auto) rebindable to any chord and individually
+> switchable, refuses duplicates, Chrome-reserved keys and this extension's own
+> command keys, warns on Chrome-used keys, and links to chrome://extensions/shortcuts
+> with the commands' current keys listed. See state-of-the-system/04 and 06.
+> Remaining: chorded SEQUENCES (press A, then B) are not supported - only modifier
+> chords.
 - **Source:** old-app 010; buglist #2 and #15 (users want REMAPPABLE shortcuts;
   Ctrl+7/8/9 collide with other apps), #7 (cannot disable).
 - **Type:** Feature + Docs
@@ -584,7 +592,7 @@ If we pick this up, a sensible order:
    feedback while scrolling).
 3. **VT-2 (eTLD+1 grouping)** - removes a real recurring annoyance; already on our
    backlog.
-4. **VT-5 / VT-6 / VT-7** - small polish items, any order.
+4. **VT-6 / VT-7** - small polish items, any order (VT-5 is done).
 5. **VT-4 (file:// + PDF doc)** - cheap win plus a docs cleanup.
 6. **VT-8 (zoom-level verdict)** - a decision note; can be done anytime.
 7. **VT-9 (text-zoom spike)** - largest and least certain; gate on the spike before
