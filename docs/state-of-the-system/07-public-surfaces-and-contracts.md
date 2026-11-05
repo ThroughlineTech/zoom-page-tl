@@ -32,7 +32,7 @@ Unknown messages get no response. There are no messages from the content script 
 
 ## Contracts with sibling repos and systems
 
-- **Chrome Web Store.** `store/listing.md` and `PRIVACY.md` make promises the code must keep: no data collection or transmission, no remote code, content script in the top frame only, permissions limited to `storage`, `tabs` and `<all_urls>`. The privacy policy URL points at `PRIVACY.md` on GitHub `main`, so that file must stay at the repo root on the default branch.
+- **Chrome Web Store.** `store/listing.md` and `PRIVACY.md` make promises the code must keep: no data collection or transmission, no remote code, content script in the top frame only, permissions limited to `storage`, `tabs` and `<all_urls>`. The listing's privacy policy URL is `https://www.throughlinetech.net/privacy/`; `PRIVACY.md` on GitHub `main` is the extension-specific policy and should stay at the repo root.
 - **GitHub.** Public repo `https://github.com/ThroughlineTech/zoom-page-tl` (linked from `extension/options.html:251` and `PRIVACY.md`).
 - **Zoom Page WE.** No runtime interaction. The original's source may be placed locally in git-ignored `reference/` (`.gitignore:12-14`) as read-only reference; its GPLv2 code must not enter `extension/`. The original's storage format is not imported; there is no migration path from ZPWE settings.
 - **Parent workspace tooling.** `~/src/notify.sh` and the `build` CLI are used by agents per `~/src/AGENTS.md`; this repo has no `.build/config.toml`, so it has no ticket backend.

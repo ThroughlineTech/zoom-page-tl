@@ -114,8 +114,11 @@ preference data stays on the device via chrome.storage.local.
 **Privacy policy URL**
 
 ```
-https://github.com/ThroughlineTech/zoom-page-tl/blob/main/PRIVACY.md
+https://www.throughlinetech.net/privacy/
 ```
+
+This is the URL the live listing uses. The repo's `PRIVACY.md` is the
+extension-specific policy text and stays public on `main`.
 
 ---
 
@@ -152,5 +155,5 @@ https://github.com/ThroughlineTech/zoom-page-tl/blob/main/PRIVACY.md
 5. Submit for review. (Review can take hours to ~2 weeks; <all_urls> may draw a closer
    look - the justifications above cover it.)
 
-Note: the Privacy policy URL must be live before you submit, so push PRIVACY.md to the
-public repo first (it is at the repo root).
+Note: the Privacy policy URL must be live before you submit; confirm
+https://www.throughlinetech.net/privacy/ loads before submitting an update.

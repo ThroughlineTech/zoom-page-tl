@@ -43,7 +43,7 @@ Unpacked extensions get a path-derived id, so the same `extension/` folder loade
 
 - The version lives in two places that must move together: `extension/manifest.json:4` and `package.json:3` (both `1.1.0`). `web-ext build` names the zip from the manifest.
 - `npm run build` produces the store upload; the manifest sits at the zip root.
-- Submission content is prepared in [store/listing.md](../../store/listing.md): name, summary, description, single purpose, category Accessibility, permission justifications, data-use certifications and the privacy policy URL (`https://github.com/ThroughlineTech/zoom-page-tl/blob/main/PRIVACY.md`). Screenshots are in `store/screenshots/` (3 PNGs).
+- Submission content is prepared in [store/listing.md](../../store/listing.md): name, summary, description, single purpose, category Accessibility, permission justifications, data-use certifications and the privacy policy URL (`https://www.throughlinetech.net/privacy/`, matching the live listing). Screenshots are in `store/screenshots/` (3 PNGs).
 - Submission itself is a manual step in the Chrome Web Store Developer Dashboard. Whether 1.0.0 has been submitted or approved is not recorded in the repository.
 
 ## Update and uninstall
